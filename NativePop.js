@@ -1,26 +1,47 @@
-// NativePop — Milestone 1 + 2 proof of concept
+// NativePop — Milestones 1-3 proof of concept
 //
 // Milestone 1: hardcoded direct-trigger card that fetches one manually-created
 // hidden dashboard's config and mounts it via HA's internal `hui-view` inside
 // a dialog.
-// Milestone 2: adds a global hashchange/popstate listener so the same dialog
-// mount can also be opened by navigating to "#popup-test" (deep link,
-// back-button aware), matching Bubble Card's `hash:` trigger style.
+// Milestone 2: a global hashchange/popstate listener opens the same dialog
+// when navigating to "#popup-<slug>" (deep link, back-button aware).
+// Milestone 3: generalizes both trigger paths so they're slug-driven instead
+// of hardcoded, and makes the direct trigger usable from ANY card's
+// tap_action (native or custom) without a wrapper card — resolving spec
+// open question 9.1 in favor of the generic-action approach:
 //
-// Both still target the ONE hardcoded dashboard below. Milestone 3
-// generalizes this into a reusable, slug-driven trigger element.
+//   tap_action:
+//     action: fire-dom-event
+//     nativepop_popup: popup-test
+//
+// This works because HA's own `fire-dom-event` action dispatches a
+// `CustomEvent("ll-custom", { bubbles: true, composed: true, detail: <actionConfig> })`
+// on the card element (see src/panels/lovelace/common/handle-action.ts) — any
+// card that uses HA's shared action handler gets this for free. A handful of
+// custom cards hand-roll their own click handling and won't fire it; that's a
+// known limitation of the mechanism itself, not something we can fix here.
+//
+// The navigation trigger also picked up a real bug fix this milestone: real
+// `tap_action: navigate` calls `history.pushState()` internally, which never
+// fires `hashchange` or `popstate` (standard browser behavior). HA works
+// around that by firing its own `"location-changed"` event on `window` after
+// every navigate() call (see src/common/navigate.ts) — we now listen for
+// that too, otherwise a real `navigation_path: "#popup-<slug>"` tap would
+// have silently done nothing.
 
-const POPUP_URL_PATH = "popup-test";
-const POPUP_HASH = `#${POPUP_URL_PATH}`;
+const POPUP_HASH_PREFIX = "#popup-";
+const DEFAULT_POPUP_URL_PATH = "popup-test"; // fallback for the PoC card only
 
 let currentDialog = null;
+let currentPopupUrlPath = null;
 let dialogOpenedViaHash = false;
 let dialogPushedByUs = false;
 let weSetHashOurselves = false;
 
 // The trigger card only has a `hass` while it's connected to a dashboard.
-// The hash listener has to work even when no NativePop card is on screen
-// (a true deep link), so it reads `hass` straight off HA's root element
+// Both the hash listener and the ll-custom listener have to work even when
+// no NativePop card is on screen (a true deep link, or a tap on some
+// unrelated native card), so they read `hass` straight off HA's root element
 // instead — a well-known but undocumented escape hatch, same category of
 // internal dependency as `hui-view` itself (see spec section 7).
 function getHass() {
@@ -28,9 +49,24 @@ function getHass() {
   return haEl ? haEl.hass : undefined;
 }
 
-async function openNativePopDialog(hass, { viaHash = false, pushedByUs = false } = {}) {
+// "#popup-<slug>" -> "popup-<slug>" (the dashboard's url_path, per spec 5.1
+// the slug IS the url_path, used verbatim as the hash too). Returns null for
+// anything else.
+function matchPopupUrlPath(hash) {
+  if (hash && hash.startsWith(POPUP_HASH_PREFIX) && hash.length > POPUP_HASH_PREFIX.length) {
+    return hash.slice(1);
+  }
+  return null;
+}
+
+async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushedByUs = false } = {}) {
   if (currentDialog) {
-    return; // already open, don't double-mount
+    if (currentPopupUrlPath !== popupUrlPath) {
+      console.warn(
+        `NativePop: popup "${popupUrlPath}" requested while "${currentPopupUrlPath}" is already open — ignoring (one popup at a time in v1)`
+      );
+    }
+    return;
   }
   if (!hass) {
     console.error("NativePop: no hass object available yet");
@@ -43,16 +79,11 @@ async function openNativePopDialog(hass, { viaHash = false, pushedByUs = false }
     // dashboard's config (see src/data/lovelace.ts -> fetchConfig).
     lovelaceConfig = await hass.callWS({
       type: "lovelace/config",
-      url_path: POPUP_URL_PATH,
+      url_path: popupUrlPath,
     });
   } catch (err) {
-    console.error(
-      `NativePop: could not fetch dashboard config for "${POPUP_URL_PATH}"`,
-      err
-    );
-    alert(
-      `NativePop: could not load popup dashboard "${POPUP_URL_PATH}". See console for details.`
-    );
+    console.error(`NativePop: could not fetch dashboard config for "${popupUrlPath}"`, err);
+    alert(`NativePop: could not load popup dashboard "${popupUrlPath}". See console for details.`);
     return;
   }
 
@@ -64,7 +95,7 @@ async function openNativePopDialog(hass, { viaHash = false, pushedByUs = false }
     config: lovelaceConfig,
     rawConfig: lovelaceConfig,
     editMode: false,
-    urlPath: POPUP_URL_PATH,
+    urlPath: popupUrlPath,
     mode: "storage",
     locale: hass.locale,
     enableFullEditMode: () => {},
@@ -87,6 +118,7 @@ async function openNativePopDialog(hass, { viaHash = false, pushedByUs = false }
   dialog.appendChild(view);
 
   currentDialog = dialog;
+  currentPopupUrlPath = popupUrlPath;
   dialogOpenedViaHash = viaHash;
   dialogPushedByUs = pushedByUs;
 
@@ -95,13 +127,14 @@ async function openNativePopDialog(hass, { viaHash = false, pushedByUs = false }
   dialog.addEventListener("closed", () => {
     dialog.remove();
     currentDialog = null;
+    currentPopupUrlPath = null;
 
     const wasViaHash = dialogOpenedViaHash;
     const wasPushedByUs = dialogPushedByUs;
     dialogOpenedViaHash = false;
     dialogPushedByUs = false;
 
-    if (!wasViaHash || location.hash !== POPUP_HASH) {
+    if (!wasViaHash || matchPopupUrlPath(location.hash) !== popupUrlPath) {
       // Direct trigger, or the hash already changed (e.g. the user hit
       // back, which is what closed us in the first place) - nothing to revert.
       return;
@@ -109,7 +142,7 @@ async function openNativePopDialog(hass, { viaHash = false, pushedByUs = false }
 
     if (wasPushedByUs) {
       // We added this hash to the history stack ourselves (nav-trigger
-      // button) -> closing the dialog should behave like pressing back.
+      // button/tap_action) -> closing the dialog should behave like pressing back.
       history.back();
     } else {
       // Hash was already there when we picked it up (cold-load deep link) —
@@ -127,52 +160,70 @@ function closeNativePopDialog() {
   }
 }
 
-function handleHashChange() {
-  if (location.hash === POPUP_HASH) {
+// Shared by hashchange, popstate, AND location-changed (see file header for
+// why all three are needed).
+function handleLocationChange() {
+  const targetPopup = matchPopupUrlPath(location.hash);
+  if (targetPopup) {
     if (!currentDialog) {
       const pushedByUs = weSetHashOurselves;
       weSetHashOurselves = false;
-      openNativePopDialog(getHass(), { viaHash: true, pushedByUs });
+      openNativePopDialog(getHass(), targetPopup, { viaHash: true, pushedByUs });
     }
   } else if (currentDialog && dialogOpenedViaHash) {
     closeNativePopDialog();
   }
 }
 
-window.addEventListener("hashchange", handleHashChange);
-window.addEventListener("popstate", handleHashChange);
+window.addEventListener("hashchange", handleLocationChange);
+window.addEventListener("popstate", handleLocationChange);
+window.addEventListener("location-changed", handleLocationChange);
 
-// Handle a cold load where the URL already has "#popup-test" in it (a real
+// Generalized direct trigger: any card's tap_action (native or custom) can
+// open a popup with:
+//   tap_action: { action: fire-dom-event, nativepop_popup: "popup-<slug>" }
+// No wrapper card required.
+window.addEventListener("ll-custom", (ev) => {
+  const popupUrlPath = ev.detail && ev.detail.nativepop_popup;
+  if (popupUrlPath) {
+    openNativePopDialog(getHass(), popupUrlPath, { viaHash: false });
+  }
+});
+
+// Handle a cold load where the URL already has "#popup-<slug>" in it (a real
 // deep link opened fresh). `hass` might not exist on the root element yet at
 // this point, so retry briefly instead of giving up immediately.
 (function openFromInitialHash() {
-  if (location.hash !== POPUP_HASH) {
+  const targetPopup = matchPopupUrlPath(location.hash);
+  if (!targetPopup) {
     return;
   }
   let attempts = 0;
   const tick = () => {
     const hass = getHass();
     if (hass) {
-      openNativePopDialog(hass, { viaHash: true, pushedByUs: false });
+      openNativePopDialog(hass, targetPopup, { viaHash: true, pushedByUs: false });
       return;
     }
     attempts += 1;
     if (attempts < 20) {
       setTimeout(tick, 250);
     } else {
-      console.warn(
-        "NativePop: gave up waiting for hass to open popup from initial hash"
-      );
+      console.warn("NativePop: gave up waiting for hass to open popup from initial hash");
     }
   };
   tick();
 })();
 
-// Bare-bones trigger card: one button per trigger path. Milestone 3
-// generalizes both into a reusable, slug-driven trigger mechanism.
+// Test harness card: configurable `popup:` slug, one button per trigger
+// path, each going through the SAME generic mechanism a plain native card
+// would use (dispatching ll-custom / setting location.hash) rather than
+// calling the internal functions directly — so this also validates the
+// listeners above, not just the dialog mount itself.
 class NativePopPocCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
+    this._popup = this._config.popup || DEFAULT_POPUP_URL_PATH;
   }
 
   set hass(hass) {
@@ -195,12 +246,18 @@ class NativePopPocCard extends HTMLElement {
     `;
 
     this.querySelector("#direct-btn").addEventListener("click", () => {
-      openNativePopDialog(this._hass, { viaHash: false });
+      this.dispatchEvent(
+        new CustomEvent("ll-custom", {
+          detail: { action: "fire-dom-event", nativepop_popup: this._popup },
+          bubbles: true,
+          composed: true,
+        })
+      );
     });
 
     this.querySelector("#hash-btn").addEventListener("click", () => {
       weSetHashOurselves = true;
-      location.hash = POPUP_URL_PATH; // handleHashChange() does the actual opening
+      location.hash = this._popup; // handleLocationChange() does the actual opening
     });
   }
 
@@ -215,7 +272,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "nativepop-poc-card",
   name: "NativePop PoC",
-  description: "Milestone 1+2 proof of concept trigger for NativePop popups.",
+  description: "Milestone 1-3 proof of concept trigger for NativePop popups.",
 });
 
-console.info("NativePop: milestone 2 PoC card loaded");
+console.info("NativePop: milestone 3 PoC card loaded");
