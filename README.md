@@ -6,13 +6,21 @@ editor, trigger via tap or navigation, reusable across dashboards.
 See [ha-popup-builder-spec.md](ha-popup-builder-spec.md) for the full technical
 spec and milestone plan.
 
-## Status: Milestone 1 (proof of concept)
+## Status: Milestone 2 (navigation trigger)
 
-Currently just validates the core idea: a hardcoded direct-trigger card that
-fetches one manually-created hidden dashboard's config and mounts it inside a
-dialog via HA's internal `hui-view` element. No navigation trigger, no
-sidebar panel, no generalized trigger element yet — those are later
-milestones.
+Still targets one hardcoded, manually-created hidden dashboard. Validates two
+things:
+
+- **Milestone 1**: a direct-trigger button that fetches the popup dashboard's
+  config and mounts it inside a dialog via HA's internal `hui-view` element.
+- **Milestone 2**: the same dialog mount can also be opened by navigating to
+  `#popup-test` — via a button that sets `location.hash`, the browser back
+  button, or loading a URL that already has the hash in it (deep link). A
+  global `hashchange`/`popstate` listener drives this, independent of
+  whether the PoC card is even on screen.
+
+No sidebar panel or generalized/slug-driven trigger element yet — those are
+later milestones.
 
 ### Try it locally via HACS (custom repository)
 
@@ -26,5 +34,12 @@ milestones.
 4. If your url_path isn't `popup-test`, edit the `POPUP_URL_PATH` constant at
    the top of `NativePop.js` to match, then reload resources.
 5. Add a card to any dashboard: `type: custom:nativepop-poc-card`.
-6. Tap the card's "Open popup" button — the popup dashboard's view should
-   render inside a dialog.
+6. Tap "Open popup (direct)" — the popup dashboard's view should render
+   inside a dialog (milestone 1).
+7. Tap "Open popup (navigate hash)" — same dialog, but the URL now shows
+   `#popup-test`. Close it and check the URL reverts; open it again and hit
+   the browser **back** button instead of closing — the dialog should close
+   and the hash disappear (milestone 2).
+8. Try loading the page with `#popup-test` already in the URL (paste it into
+   the address bar and hit enter) — the dialog should open on its own once
+   `hass` is ready.

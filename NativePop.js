@@ -1,22 +1,37 @@
-// NativePop — Milestone 1 proof of concept
+// NativePop — Milestone 1 + 2 proof of concept
 //
-// Goal (per spec, milestone 1): validate that we can fetch a hidden popup
-// dashboard's config and mount it inside a dialog using HA's own `hui-view`
-// element, triggered by a direct tap. Everything here is intentionally
-// hardcoded/throwaway — no slug-driven trigger element, no navigation/hash
-// support, no sidebar panel yet. Those come in later milestones.
+// Milestone 1: hardcoded direct-trigger card that fetches one manually-created
+// hidden dashboard's config and mounts it via HA's internal `hui-view` inside
+// a dialog.
+// Milestone 2: adds a global hashchange/popstate listener so the same dialog
+// mount can also be opened by navigating to "#popup-test" (deep link,
+// back-button aware), matching Bubble Card's `hash:` trigger style.
 //
-// Setup:
-// 1. In HA, manually create a dashboard: Settings > Dashboards > Add dashboard,
-//    uncheck "Show in sidebar", give it a URL path (e.g. "popup-test"),
-//    add some cards to its single view.
-// 2. Change POPUP_URL_PATH below to match that url_path.
-// 3. Add a card to any dashboard with: type: custom:nativepop-poc-card
-// 4. Tap the card's button — it should open the popup dashboard's view in a dialog.
+// Both still target the ONE hardcoded dashboard below. Milestone 3
+// generalizes this into a reusable, slug-driven trigger element.
 
 const POPUP_URL_PATH = "popup-test";
+const POPUP_HASH = `#${POPUP_URL_PATH}`;
 
-async function openNativePopDialog(hass) {
+let currentDialog = null;
+let dialogOpenedViaHash = false;
+let dialogPushedByUs = false;
+let weSetHashOurselves = false;
+
+// The trigger card only has a `hass` while it's connected to a dashboard.
+// The hash listener has to work even when no NativePop card is on screen
+// (a true deep link), so it reads `hass` straight off HA's root element
+// instead — a well-known but undocumented escape hatch, same category of
+// internal dependency as `hui-view` itself (see spec section 7).
+function getHass() {
+  const haEl = document.querySelector("home-assistant");
+  return haEl ? haEl.hass : undefined;
+}
+
+async function openNativePopDialog(hass, { viaHash = false, pushedByUs = false } = {}) {
+  if (currentDialog) {
+    return; // already open, don't double-mount
+  }
   if (!hass) {
     console.error("NativePop: no hass object available yet");
     return;
@@ -71,16 +86,90 @@ async function openNativePopDialog(hass) {
 
   dialog.appendChild(view);
 
-  // ha-dialog (mwc-dialog) fires "closed" on any close path (X, ESC, etc.)
+  currentDialog = dialog;
+  dialogOpenedViaHash = viaHash;
+  dialogPushedByUs = pushedByUs;
+
+  // ha-dialog (mwc-dialog) fires "closed" on any close path (X, ESC, outside
+  // click, or us setting .open = false).
   dialog.addEventListener("closed", () => {
     dialog.remove();
+    currentDialog = null;
+
+    const wasViaHash = dialogOpenedViaHash;
+    const wasPushedByUs = dialogPushedByUs;
+    dialogOpenedViaHash = false;
+    dialogPushedByUs = false;
+
+    if (!wasViaHash || location.hash !== POPUP_HASH) {
+      // Direct trigger, or the hash already changed (e.g. the user hit
+      // back, which is what closed us in the first place) - nothing to revert.
+      return;
+    }
+
+    if (wasPushedByUs) {
+      // We added this hash to the history stack ourselves (nav-trigger
+      // button) -> closing the dialog should behave like pressing back.
+      history.back();
+    } else {
+      // Hash was already there when we picked it up (cold-load deep link) —
+      // strip it without touching history so we don't navigate outside the app.
+      history.replaceState(null, "", location.pathname + location.search);
+    }
   });
 
   document.body.appendChild(dialog);
 }
 
-// Bare-bones direct-trigger card: a button that opens the hardcoded popup.
-// Milestone 3 generalizes this into a reusable, slug-driven trigger.
+function closeNativePopDialog() {
+  if (currentDialog) {
+    currentDialog.open = false;
+  }
+}
+
+function handleHashChange() {
+  if (location.hash === POPUP_HASH) {
+    if (!currentDialog) {
+      const pushedByUs = weSetHashOurselves;
+      weSetHashOurselves = false;
+      openNativePopDialog(getHass(), { viaHash: true, pushedByUs });
+    }
+  } else if (currentDialog && dialogOpenedViaHash) {
+    closeNativePopDialog();
+  }
+}
+
+window.addEventListener("hashchange", handleHashChange);
+window.addEventListener("popstate", handleHashChange);
+
+// Handle a cold load where the URL already has "#popup-test" in it (a real
+// deep link opened fresh). `hass` might not exist on the root element yet at
+// this point, so retry briefly instead of giving up immediately.
+(function openFromInitialHash() {
+  if (location.hash !== POPUP_HASH) {
+    return;
+  }
+  let attempts = 0;
+  const tick = () => {
+    const hass = getHass();
+    if (hass) {
+      openNativePopDialog(hass, { viaHash: true, pushedByUs: false });
+      return;
+    }
+    attempts += 1;
+    if (attempts < 20) {
+      setTimeout(tick, 250);
+    } else {
+      console.warn(
+        "NativePop: gave up waiting for hass to open popup from initial hash"
+      );
+    }
+  };
+  tick();
+})();
+
+// Bare-bones trigger card: one button per trigger path. Milestone 3
+// generalizes both into a reusable, slug-driven trigger mechanism.
 class NativePopPocCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
@@ -98,14 +187,20 @@ class NativePopPocCard extends HTMLElement {
 
     this.innerHTML = `
       <ha-card header="NativePop PoC">
-        <div style="padding: 16px;">
-          <mwc-button raised>Open popup</mwc-button>
+        <div style="padding: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
+          <mwc-button raised id="direct-btn">Open popup (direct)</mwc-button>
+          <mwc-button raised id="hash-btn">Open popup (navigate hash)</mwc-button>
         </div>
       </ha-card>
     `;
 
-    this.querySelector("mwc-button").addEventListener("click", () => {
-      openNativePopDialog(this._hass);
+    this.querySelector("#direct-btn").addEventListener("click", () => {
+      openNativePopDialog(this._hass, { viaHash: false });
+    });
+
+    this.querySelector("#hash-btn").addEventListener("click", () => {
+      weSetHashOurselves = true;
+      location.hash = POPUP_URL_PATH; // handleHashChange() does the actual opening
     });
   }
 
@@ -120,7 +215,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "nativepop-poc-card",
   name: "NativePop PoC",
-  description: "Milestone 1 proof of concept trigger for NativePop popups.",
+  description: "Milestone 1+2 proof of concept trigger for NativePop popups.",
 });
 
-console.info("NativePop: milestone 1 PoC card loaded");
+console.info("NativePop: milestone 2 PoC card loaded");
