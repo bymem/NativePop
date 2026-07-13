@@ -1,269 +1,138 @@
-// node_modules/lit-html/lit-html.js
-var t = globalThis;
-var i = (t2) => t2;
-var s = t.trustedTypes;
-var e = s ? s.createPolicy("lit-html", { createHTML: (t2) => t2 }) : void 0;
-var h = "$lit$";
-var o = `lit$${Math.random().toFixed(9).slice(2)}$`;
-var n = "?" + o;
-var r = `<${n}>`;
-var l = document;
-var c = () => l.createComment("");
-var a = (t2) => null === t2 || "object" != typeof t2 && "function" != typeof t2;
-var u = Array.isArray;
-var d = (t2) => u(t2) || "function" == typeof t2?.[Symbol.iterator];
-var f = "[ 	\n\f\r]";
-var v = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g;
-var _ = /-->/g;
-var m = />/g;
-var p = RegExp(`>|${f}(?:([^\\s"'>=/]+)(${f}*=${f}*(?:[^ 	
-\f\r"'\`<>=]|("|')|))|$)`, "g");
-var g = /'/g;
-var $ = /"/g;
-var y = /^(?:script|style|textarea|title)$/i;
-var x = (t2) => (i2, ...s2) => ({ _$litType$: t2, strings: i2, values: s2 });
-var b = x(1);
-var w = x(2);
-var T = x(3);
-var E = /* @__PURE__ */ Symbol.for("lit-noChange");
-var A = /* @__PURE__ */ Symbol.for("lit-nothing");
-var C = /* @__PURE__ */ new WeakMap();
-var P = l.createTreeWalker(l, 129);
-function V(t2, i2) {
-  if (!u(t2) || !t2.hasOwnProperty("raw")) throw Error("invalid template strings array");
-  return void 0 !== e ? e.createHTML(i2) : i2;
-}
-var N = (t2, i2) => {
-  const s2 = t2.length - 1, e2 = [];
-  let n2, l2 = 2 === i2 ? "<svg>" : 3 === i2 ? "<math>" : "", c2 = v;
-  for (let i3 = 0; i3 < s2; i3++) {
-    const s3 = t2[i3];
-    let a2, u2, d2 = -1, f2 = 0;
-    for (; f2 < s3.length && (c2.lastIndex = f2, u2 = c2.exec(s3), null !== u2); ) f2 = c2.lastIndex, c2 === v ? "!--" === u2[1] ? c2 = _ : void 0 !== u2[1] ? c2 = m : void 0 !== u2[2] ? (y.test(u2[2]) && (n2 = RegExp("</" + u2[2], "g")), c2 = p) : void 0 !== u2[3] && (c2 = p) : c2 === p ? ">" === u2[0] ? (c2 = n2 ?? v, d2 = -1) : void 0 === u2[1] ? d2 = -2 : (d2 = c2.lastIndex - u2[2].length, a2 = u2[1], c2 = void 0 === u2[3] ? p : '"' === u2[3] ? $ : g) : c2 === $ || c2 === g ? c2 = p : c2 === _ || c2 === m ? c2 = v : (c2 = p, n2 = void 0);
-    const x2 = c2 === p && t2[i3 + 1].startsWith("/>") ? " " : "";
-    l2 += c2 === v ? s3 + r : d2 >= 0 ? (e2.push(a2), s3.slice(0, d2) + h + s3.slice(d2) + o + x2) : s3 + o + (-2 === d2 ? i3 : x2);
-  }
-  return [V(t2, l2 + (t2[s2] || "<?>") + (2 === i2 ? "</svg>" : 3 === i2 ? "</math>" : "")), e2];
-};
-var S = class _S {
-  constructor({ strings: t2, _$litType$: i2 }, e2) {
-    let r2;
-    this.parts = [];
-    let l2 = 0, a2 = 0;
-    const u2 = t2.length - 1, d2 = this.parts, [f2, v2] = N(t2, i2);
-    if (this.el = _S.createElement(f2, e2), P.currentNode = this.el.content, 2 === i2 || 3 === i2) {
-      const t3 = this.el.content.firstChild;
-      t3.replaceWith(...t3.childNodes);
-    }
-    for (; null !== (r2 = P.nextNode()) && d2.length < u2; ) {
-      if (1 === r2.nodeType) {
-        if (r2.hasAttributes()) for (const t3 of r2.getAttributeNames()) if (t3.endsWith(h)) {
-          const i3 = v2[a2++], s2 = r2.getAttribute(t3).split(o), e3 = /([.?@])?(.*)/.exec(i3);
-          d2.push({ type: 1, index: l2, name: e3[2], strings: s2, ctor: "." === e3[1] ? I : "?" === e3[1] ? L : "@" === e3[1] ? z : H }), r2.removeAttribute(t3);
-        } else t3.startsWith(o) && (d2.push({ type: 6, index: l2 }), r2.removeAttribute(t3));
-        if (y.test(r2.tagName)) {
-          const t3 = r2.textContent.split(o), i3 = t3.length - 1;
-          if (i3 > 0) {
-            r2.textContent = s ? s.emptyScript : "";
-            for (let s2 = 0; s2 < i3; s2++) r2.append(t3[s2], c()), P.nextNode(), d2.push({ type: 2, index: ++l2 });
-            r2.append(t3[i3], c());
-          }
-        }
-      } else if (8 === r2.nodeType) if (r2.data === n) d2.push({ type: 2, index: l2 });
-      else {
-        let t3 = -1;
-        for (; -1 !== (t3 = r2.data.indexOf(o, t3 + 1)); ) d2.push({ type: 7, index: l2 }), t3 += o.length - 1;
-      }
-      l2++;
-    }
-  }
-  static createElement(t2, i2) {
-    const s2 = l.createElement("template");
-    return s2.innerHTML = t2, s2;
-  }
-};
-function M(t2, i2, s2 = t2, e2) {
-  if (i2 === E) return i2;
-  let h2 = void 0 !== e2 ? s2._$Co?.[e2] : s2._$Cl;
-  const o2 = a(i2) ? void 0 : i2._$litDirective$;
-  return h2?.constructor !== o2 && (h2?._$AO?.(false), void 0 === o2 ? h2 = void 0 : (h2 = new o2(t2), h2._$AT(t2, s2, e2)), void 0 !== e2 ? (s2._$Co ??= [])[e2] = h2 : s2._$Cl = h2), void 0 !== h2 && (i2 = M(t2, h2._$AS(t2, i2.values), h2, e2)), i2;
-}
-var R = class {
-  constructor(t2, i2) {
-    this._$AV = [], this._$AN = void 0, this._$AD = t2, this._$AM = i2;
-  }
-  get parentNode() {
-    return this._$AM.parentNode;
-  }
-  get _$AU() {
-    return this._$AM._$AU;
-  }
-  u(t2) {
-    const { el: { content: i2 }, parts: s2 } = this._$AD, e2 = (t2?.creationScope ?? l).importNode(i2, true);
-    P.currentNode = e2;
-    let h2 = P.nextNode(), o2 = 0, n2 = 0, r2 = s2[0];
-    for (; void 0 !== r2; ) {
-      if (o2 === r2.index) {
-        let i3;
-        2 === r2.type ? i3 = new k(h2, h2.nextSibling, this, t2) : 1 === r2.type ? i3 = new r2.ctor(h2, r2.name, r2.strings, this, t2) : 6 === r2.type && (i3 = new Z(h2, this, t2)), this._$AV.push(i3), r2 = s2[++n2];
-      }
-      o2 !== r2?.index && (h2 = P.nextNode(), o2++);
-    }
-    return P.currentNode = l, e2;
-  }
-  p(t2) {
-    let i2 = 0;
-    for (const s2 of this._$AV) void 0 !== s2 && (void 0 !== s2.strings ? (s2._$AI(t2, s2, i2), i2 += s2.strings.length - 2) : s2._$AI(t2[i2])), i2++;
-  }
-};
-var k = class _k {
-  get _$AU() {
-    return this._$AM?._$AU ?? this._$Cv;
-  }
-  constructor(t2, i2, s2, e2) {
-    this.type = 2, this._$AH = A, this._$AN = void 0, this._$AA = t2, this._$AB = i2, this._$AM = s2, this.options = e2, this._$Cv = e2?.isConnected ?? true;
-  }
-  get parentNode() {
-    let t2 = this._$AA.parentNode;
-    const i2 = this._$AM;
-    return void 0 !== i2 && 11 === t2?.nodeType && (t2 = i2.parentNode), t2;
-  }
-  get startNode() {
-    return this._$AA;
-  }
-  get endNode() {
-    return this._$AB;
-  }
-  _$AI(t2, i2 = this) {
-    t2 = M(this, t2, i2), a(t2) ? t2 === A || null == t2 || "" === t2 ? (this._$AH !== A && this._$AR(), this._$AH = A) : t2 !== this._$AH && t2 !== E && this._(t2) : void 0 !== t2._$litType$ ? this.$(t2) : void 0 !== t2.nodeType ? this.T(t2) : d(t2) ? this.k(t2) : this._(t2);
-  }
-  O(t2) {
-    return this._$AA.parentNode.insertBefore(t2, this._$AB);
-  }
-  T(t2) {
-    this._$AH !== t2 && (this._$AR(), this._$AH = this.O(t2));
-  }
-  _(t2) {
-    this._$AH !== A && a(this._$AH) ? this._$AA.nextSibling.data = t2 : this.T(l.createTextNode(t2)), this._$AH = t2;
-  }
-  $(t2) {
-    const { values: i2, _$litType$: s2 } = t2, e2 = "number" == typeof s2 ? this._$AC(t2) : (void 0 === s2.el && (s2.el = S.createElement(V(s2.h, s2.h[0]), this.options)), s2);
-    if (this._$AH?._$AD === e2) this._$AH.p(i2);
-    else {
-      const t3 = new R(e2, this), s3 = t3.u(this.options);
-      t3.p(i2), this.T(s3), this._$AH = t3;
-    }
-  }
-  _$AC(t2) {
-    let i2 = C.get(t2.strings);
-    return void 0 === i2 && C.set(t2.strings, i2 = new S(t2)), i2;
-  }
-  k(t2) {
-    u(this._$AH) || (this._$AH = [], this._$AR());
-    const i2 = this._$AH;
-    let s2, e2 = 0;
-    for (const h2 of t2) e2 === i2.length ? i2.push(s2 = new _k(this.O(c()), this.O(c()), this, this.options)) : s2 = i2[e2], s2._$AI(h2), e2++;
-    e2 < i2.length && (this._$AR(s2 && s2._$AB.nextSibling, e2), i2.length = e2);
-  }
-  _$AR(t2 = this._$AA.nextSibling, s2) {
-    for (this._$AP?.(false, true, s2); t2 !== this._$AB; ) {
-      const s3 = i(t2).nextSibling;
-      i(t2).remove(), t2 = s3;
-    }
-  }
-  setConnected(t2) {
-    void 0 === this._$AM && (this._$Cv = t2, this._$AP?.(t2));
-  }
-};
-var H = class {
-  get tagName() {
-    return this.element.tagName;
-  }
-  get _$AU() {
-    return this._$AM._$AU;
-  }
-  constructor(t2, i2, s2, e2, h2) {
-    this.type = 1, this._$AH = A, this._$AN = void 0, this.element = t2, this.name = i2, this._$AM = e2, this.options = h2, s2.length > 2 || "" !== s2[0] || "" !== s2[1] ? (this._$AH = Array(s2.length - 1).fill(new String()), this.strings = s2) : this._$AH = A;
-  }
-  _$AI(t2, i2 = this, s2, e2) {
-    const h2 = this.strings;
-    let o2 = false;
-    if (void 0 === h2) t2 = M(this, t2, i2, 0), o2 = !a(t2) || t2 !== this._$AH && t2 !== E, o2 && (this._$AH = t2);
-    else {
-      const e3 = t2;
-      let n2, r2;
-      for (t2 = h2[0], n2 = 0; n2 < h2.length - 1; n2++) r2 = M(this, e3[s2 + n2], i2, n2), r2 === E && (r2 = this._$AH[n2]), o2 ||= !a(r2) || r2 !== this._$AH[n2], r2 === A ? t2 = A : t2 !== A && (t2 += (r2 ?? "") + h2[n2 + 1]), this._$AH[n2] = r2;
-    }
-    o2 && !e2 && this.j(t2);
-  }
-  j(t2) {
-    t2 === A ? this.element.removeAttribute(this.name) : this.element.setAttribute(this.name, t2 ?? "");
-  }
-};
-var I = class extends H {
-  constructor() {
-    super(...arguments), this.type = 3;
-  }
-  j(t2) {
-    this.element[this.name] = t2 === A ? void 0 : t2;
-  }
-};
-var L = class extends H {
-  constructor() {
-    super(...arguments), this.type = 4;
-  }
-  j(t2) {
-    this.element.toggleAttribute(this.name, !!t2 && t2 !== A);
-  }
-};
-var z = class extends H {
-  constructor(t2, i2, s2, e2, h2) {
-    super(t2, i2, s2, e2, h2), this.type = 5;
-  }
-  _$AI(t2, i2 = this) {
-    if ((t2 = M(this, t2, i2, 0) ?? A) === E) return;
-    const s2 = this._$AH, e2 = t2 === A && s2 !== A || t2.capture !== s2.capture || t2.once !== s2.once || t2.passive !== s2.passive, h2 = t2 !== A && (s2 === A || e2);
-    e2 && this.element.removeEventListener(this.name, this, s2), h2 && this.element.addEventListener(this.name, this, t2), this._$AH = t2;
-  }
-  handleEvent(t2) {
-    "function" == typeof this._$AH ? this._$AH.call(this.options?.host ?? this.element, t2) : this._$AH.handleEvent(t2);
-  }
-};
-var Z = class {
-  constructor(t2, i2, s2) {
-    this.element = t2, this.type = 6, this._$AN = void 0, this._$AM = i2, this.options = s2;
-  }
-  get _$AU() {
-    return this._$AM._$AU;
-  }
-  _$AI(t2) {
-    M(this, t2);
-  }
-};
-var B = t.litHtmlPolyfillSupport;
-B?.(S, k), (t.litHtmlVersions ??= []).push("3.3.3");
+// NativePop — Milestones 1-5 proof of concept
+//
+// Milestone 1: hardcoded direct-trigger card that fetches one manually-created
+// hidden dashboard's config and mounts it via HA's internal `hui-view` inside
+// a dialog.
+// Milestone 2: a global hashchange/popstate listener opens the same dialog
+// when navigating to "#popup-<slug>" (deep link, back-button aware).
+// Milestone 3: generalizes both trigger paths so they're slug-driven instead
+// of hardcoded, and makes the direct trigger usable from ANY card's
+// tap_action (native or custom) without a wrapper card — resolving spec
+// open question 9.1 in favor of the generic-action approach:
+//
+//   tap_action:
+//     action: fire-dom-event
+//     nativepop_popup: popup-test
+//
+// This works because HA's own `fire-dom-event` action dispatches a
+// `CustomEvent("ll-custom", { bubbles: true, composed: true, detail: <actionConfig> })`
+// on the card element (see src/panels/lovelace/common/handle-action.ts) — any
+// card that uses HA's shared action handler gets this for free. A handful of
+// custom cards hand-roll their own click handling and won't fire it; that's a
+// known limitation of the mechanism itself, not something we can fix here.
+//
+// The navigation trigger also picked up a real bug fix this milestone: real
+// `tap_action: navigate` calls `history.pushState()` internally, which never
+// fires `hashchange` or `popstate` (standard browser behavior). HA works
+// around that by firing its own `"location-changed"` event on `window` after
+// every navigate() call (see src/common/navigate.ts) — we now listen for
+// that too, otherwise a real `navigation_path: "#popup-<slug>"` tap would
+// have silently done nothing.
+//
+// In practice `tap_action: navigate` to a "#popup-<slug>" hash is the
+// recommended tap-trigger for real dashboards (tile cards, navbar cards,
+// etc.) — it's fully visual-editor friendly. `fire-dom-event` above still
+// works, but HA hid it from the visual action picker some releases back
+// (YAML-only now), so it's kept as a working fallback rather than the
+// primary path.
+//
+// Also new this milestone: automation-triggered popups, with no tap at all —
+// e.g. a security automation opening a popup on its own. HA has a built-in,
+// visually-editable "Fire an event" action that needs no custom backend
+// integration (docs: home-assistant.io/docs/scripts/#fire-an-event):
+//
+//   actions:
+//     - event: nativepop_open_popup
+//       event_data:
+//         popup: popup-security
+//
+// We subscribe to that event type over the same websocket connection `hass`
+// already uses. This broadcasts to every connected frontend session (same
+// as any other HA event) — there's no per-browser/per-user targeting in v1.
+//
+// Milestone 4: sidebar panel ("Popup Manager"), plus a delivery pivot — this
+// file is now served by the NativePop *integration*
+// (custom_components/nativepop/), not a HACS "plugin"/Lovelace-resource
+// install. The integration's frontend.py auto-loads this module on every
+// frontend page via `add_extra_js_url()` (so the trigger listeners are
+// always live, no manual "add resource" step) and registers the sidebar
+// panel via `panel_custom.async_register_panel()` (so no manual
+// configuration.yaml entry either) — both self-register the moment the
+// integration's (config-free) config flow is confirmed. List/create/delete
+// only in v1, naming-convention based (any dashboard whose url_path starts
+// with "popup-" counts, per spec 5.6 — no backend/metadata registry).
+//
+// Milestone 5 (polish): rename support; dialog loading state + widened
+// sizing; close-on-outside-click (already ha-dialog's default); create/rename
+// moved off prompt() onto a real dialog (ha-dialog + ha-form + ha-dialog-footer
+// + ha-button, matching dialog-lovelace-dashboard-detail.ts); click-to-copy on
+// each row's url_path/hash.
+//
+// The Popup Manager panel's list went through a real architecture change
+// partway through milestone 5: it started as hand-rolled bordered divs, then
+// plain divs styled to look like a list (after ha-list/ha-list-item's meta
+// slot turned out not to render reliably), but Mikkel kept pointing back to
+// the same lesson - stop approximating the native "Manage dashboards" page
+// (ha-config-lovelace-dashboards.ts), use its actual components. That page's
+// list is a `hass-tabs-subpage-data-table` wrapping `ha-data-table`, with
+// built-in sortable columns, click-to-open rows, an overflow menu per row,
+// AND a built-in search box — exactly the "add search" ask too.
+//
+// The catch: `ha-data-table` columns that render anything beyond plain text
+// (icons, the overflow menu) require a `column.template` function returning
+// a real Lit `TemplateResult` - a plain HTML string gets auto-escaped as
+// literal text by Lit's XSS protection, not parsed as markup. That needs
+// `lit-html`'s `html` tag, which isn't available without a bundler. This is
+// the reason this project now has a build step (esbuild, see package.json) -
+// everything else in this file is still plain, dependency-free JS; `lit-html`
+// is used *only* for the handful of `column.template` callbacks below.
+import { html } from "lit-html";
 
-// src/nativepop.js
-var POPUP_URL_PATH_PREFIX = "popup-";
-var POPUP_HASH_PREFIX = `#${POPUP_URL_PATH_PREFIX}`;
-var DEFAULT_POPUP_URL_PATH = "popup-test";
-var ICON_PATHS = {
-  pencil: "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z",
-  renameBox: "M18,17H10.5L12.5,15H18M6,17V14.5L13.88,6.65C14.07,6.45 14.39,6.45 14.59,6.65L16.35,8.41C16.55,8.61 16.55,8.92 16.35,9.12L8.47,17M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3Z",
-  deleteOutline: "M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19M8,9H16V19H8V9M15.5,4L14.5,3H9.5L8.5,4H5V6H19V4H15.5Z"
+const POPUP_URL_PATH_PREFIX = "popup-";
+const POPUP_HASH_PREFIX = `#${POPUP_URL_PATH_PREFIX}`;
+const DEFAULT_POPUP_URL_PATH = "popup-test"; // fallback for the PoC card only
+
+// Real MDI SVG path data (from @mdi/js / @mdi/svg), needed because
+// ha-icon-overflow-menu's `items[].path` field requires raw path data, not
+// an "mdi:name" string the way ha-icon-button's slot fallback accepts.
+const ICON_PATHS = {
+  pencil:
+    "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z",
+  renameBox:
+    "M18,17H10.5L12.5,15H18M6,17V14.5L13.88,6.65C14.07,6.45 14.39,6.45 14.59,6.65L16.35,8.41C16.55,8.61 16.55,8.92 16.35,9.12L8.47,17M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3Z",
+  deleteOutline:
+    "M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19M8,9H16V19H8V9M15.5,4L14.5,3H9.5L8.5,4H5V6H19V4H15.5Z",
 };
-var currentDialog = null;
-var currentPopupUrlPath = null;
-var dialogOpenedViaHash = false;
-var dialogPushedByUs = false;
-var weSetHashOurselves = false;
+
+let currentDialog = null;
+let currentPopupUrlPath = null;
+let dialogOpenedViaHash = false;
+let dialogPushedByUs = false;
+let weSetHashOurselves = false;
+
+// The trigger card only has a `hass` while it's connected to a dashboard.
+// Both the hash listener and the ll-custom listener have to work even when
+// no NativePop card is on screen (a true deep link, or a tap on some
+// unrelated native card), so they read `hass` straight off HA's root element
+// instead — a well-known but undocumented escape hatch, same category of
+// internal dependency as `hui-view` itself (see spec section 7).
 function getHass() {
   const haEl = document.querySelector("home-assistant");
-  return haEl ? haEl.hass : void 0;
+  return haEl ? haEl.hass : undefined;
 }
+
+// After a programmatic history.pushState(), HA's own router needs this event
+// to notice the URL changed and re-render (same event navigate() fires
+// itself — see src/common/navigate.ts, and the file header above).
 function fireLocationChanged() {
   window.dispatchEvent(new CustomEvent("location-changed", { bubbles: true, composed: true }));
 }
+
+// Shared loading-spinner/error styles for both the trigger dialog and the
+// Popup Manager panel. Deliberately a hand-rolled CSS spinner rather than an
+// HA internal component (e.g. ha-circular-progress) — this has zero
+// dependency on undocumented internals, themes correctly via
+// var(--primary-color), and is guaranteed to render the same everywhere.
 (function injectSharedStyles() {
   if (document.getElementById("nativepop-shared-styles")) {
     return;
@@ -287,17 +156,22 @@ function fireLocationChanged() {
   `;
   document.head.appendChild(style);
 })();
+
+// "#popup-<slug>" -> "popup-<slug>" (the dashboard's url_path, per spec 5.1
+// the slug IS the url_path, used verbatim as the hash too). Returns null for
+// anything else.
 function matchPopupUrlPath(hash) {
   if (hash && hash.startsWith(POPUP_HASH_PREFIX) && hash.length > POPUP_HASH_PREFIX.length) {
     return hash.slice(1);
   }
   return null;
 }
+
 async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushedByUs = false } = {}) {
   if (currentDialog) {
     if (currentPopupUrlPath !== popupUrlPath) {
       console.warn(
-        `NativePop: popup "${popupUrlPath}" requested while "${currentPopupUrlPath}" is already open \u2014 ignoring (one popup at a time in v1)`
+        `NativePop: popup "${popupUrlPath}" requested while "${currentPopupUrlPath}" is already open — ignoring (one popup at a time in v1)`
       );
     }
     return;
@@ -306,41 +180,67 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
     console.error("NativePop: no hass object available yet");
     return;
   }
+
+  // Open the dialog shell immediately with a loading state, rather than
+  // waiting on the WS fetch below first — otherwise there's a silent delay
+  // between tapping/navigating and anything appearing at all.
   const dialog = document.createElement("ha-dialog");
   dialog.heading = "NativePop";
   dialog.open = true;
+  // mwc-dialog's default width is cramped for a full dashboard view; widen
+  // it via the custom property ha-dialog actually reads for its default
+  // ("medium") width tier (see src/components/ha-dialog.ts).
   dialog.style.setProperty("--ha-dialog-width-md", "min(90vw, 1024px)");
+
   const content = document.createElement("div");
   content.className = "nativepop-loading";
-  content.innerHTML = `<div class="nativepop-spinner"></div><span>Loading popup\u2026</span>`;
+  content.innerHTML = `<div class="nativepop-spinner"></div><span>Loading popup…</span>`;
   dialog.appendChild(content);
+
   currentDialog = dialog;
   currentPopupUrlPath = popupUrlPath;
   dialogOpenedViaHash = viaHash;
   dialogPushedByUs = pushedByUs;
+
+  // ha-dialog (mwc-dialog) fires "closed" on any close path (X, ESC, outside
+  // click — which is already the default here since we never set
+  // preventScrimClose — or us setting .open = false).
   dialog.addEventListener("closed", () => {
     dialog.remove();
     currentDialog = null;
     currentPopupUrlPath = null;
+
     const wasViaHash = dialogOpenedViaHash;
     const wasPushedByUs = dialogPushedByUs;
     dialogOpenedViaHash = false;
     dialogPushedByUs = false;
+
     if (!wasViaHash || matchPopupUrlPath(location.hash) !== popupUrlPath) {
+      // Direct trigger, or the hash already changed (e.g. the user hit
+      // back, which is what closed us in the first place) - nothing to revert.
       return;
     }
+
     if (wasPushedByUs) {
+      // We added this hash to the history stack ourselves (nav-trigger
+      // button/tap_action) -> closing the dialog should behave like pressing back.
       history.back();
     } else {
+      // Hash was already there when we picked it up (cold-load deep link) —
+      // strip it without touching history so we don't navigate outside the app.
       history.replaceState(null, "", location.pathname + location.search);
     }
   });
+
   document.body.appendChild(dialog);
+
   let lovelaceConfig;
   try {
+    // Same WS command HA's own frontend uses to fetch a non-default
+    // dashboard's config (see src/data/lovelace.ts -> fetchConfig).
     lovelaceConfig = await hass.callWS({
       type: "lovelace/config",
-      url_path: popupUrlPath
+      url_path: popupUrlPath,
     });
   } catch (err) {
     console.error(`NativePop: could not fetch dashboard config for "${popupUrlPath}"`, err);
@@ -350,9 +250,17 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
     }
     return;
   }
+
   if (currentDialog !== dialog) {
+    // Closed again before the fetch resolved (e.g. tapped open then
+    // immediately closed) - nothing left to mount into.
     return;
   }
+
+  // Minimal but structurally correct `Lovelace` object — matches the shape
+  // hui-view/hui-root expect (config, rawConfig, editMode, urlPath, mode,
+  // locale, plus the edit/save/toast callbacks). We're read-only for the
+  // PoC, so the mutating callbacks are no-ops.
   const lovelace = {
     config: lovelaceConfig,
     rawConfig: lovelaceConfig,
@@ -360,30 +268,31 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
     urlPath: popupUrlPath,
     mode: "storage",
     locale: hass.locale,
-    enableFullEditMode: () => {
-    },
-    setEditMode: () => {
-    },
-    saveConfig: async () => {
-    },
-    deleteConfig: async () => {
-    },
-    showToast: () => {
-    }
+    enableFullEditMode: () => {},
+    setEditMode: () => {},
+    saveConfig: async () => {},
+    deleteConfig: async () => {},
+    showToast: () => {},
   };
+
   const view = document.createElement("hui-view");
   view.hass = hass;
   view.lovelace = lovelace;
-  view.index = 0;
+  view.index = 0; // popup dashboards are single-view (spec 5.1)
   view.narrow = false;
+
   content.remove();
   dialog.appendChild(view);
 }
+
 function closeNativePopDialog() {
   if (currentDialog) {
     currentDialog.open = false;
   }
 }
+
+// Shared by hashchange, popstate, AND location-changed (see file header for
+// why all three are needed).
 function handleLocationChange() {
   const targetPopup = matchPopupUrlPath(location.hash);
   if (targetPopup) {
@@ -396,15 +305,25 @@ function handleLocationChange() {
     closeNativePopDialog();
   }
 }
+
 window.addEventListener("hashchange", handleLocationChange);
 window.addEventListener("popstate", handleLocationChange);
 window.addEventListener("location-changed", handleLocationChange);
+
+// Generalized direct trigger: any card's tap_action (native or custom) can
+// open a popup with:
+//   tap_action: { action: fire-dom-event, nativepop_popup: "popup-<slug>" }
+// No wrapper card required.
 window.addEventListener("ll-custom", (ev) => {
   const popupUrlPath = ev.detail && ev.detail.nativepop_popup;
   if (popupUrlPath) {
     openNativePopDialog(getHass(), popupUrlPath, { viaHash: false });
   }
 });
+
+// Handle a cold load where the URL already has "#popup-<slug>" in it (a real
+// deep link opened fresh). `hass` might not exist on the root element yet at
+// this point, so retry briefly instead of giving up immediately.
 (function openFromInitialHash() {
   const targetPopup = matchPopupUrlPath(location.hash);
   if (!targetPopup) {
@@ -426,7 +345,13 @@ window.addEventListener("ll-custom", (ev) => {
   };
   tick();
 })();
-var NATIVEPOP_EVENT_TYPE = "nativepop_open_popup";
+
+const NATIVEPOP_EVENT_TYPE = "nativepop_open_popup";
+
+// Automation-triggered popups (see file header) — subscribe once `hass` (and
+// its websocket connection) is available, then leave the subscription alive
+// for the page's lifetime. home-assistant-js-websocket re-subscribes
+// automatically after a reconnect, so this doesn't need to be redone.
 (function subscribeToPopupEvents() {
   let attempts = 0;
   const tick = () => {
@@ -449,21 +374,36 @@ var NATIVEPOP_EVENT_TYPE = "nativepop_open_popup";
   };
   tick();
 })();
+
 function slugify(text) {
-  return text.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
+
+// Real dialog for entering a popup's name (create/rename), matching HA's own
+// dashboard create/edit dialog (dialog-lovelace-dashboard-detail.ts) instead
+// of a browser prompt(): ha-dialog + ha-form (schema-driven, so it renders
+// through the same field components any native settings form uses) +
+// ha-dialog-footer with primary/secondary ha-button actions. Resolves to the
+// trimmed title string, or null if cancelled.
 function showNativePopFormDialog(hass, { heading, initialTitle = "", confirmLabel }) {
   return new Promise((resolve) => {
     let currentTitle = initialTitle;
     let resolved = false;
+
     const dialog = document.createElement("ha-dialog");
     dialog.heading = heading;
     dialog.open = true;
+
     const form = document.createElement("ha-form");
     form.hass = hass;
     form.schema = [{ name: "title", required: true, selector: { text: {} } }];
     form.data = { title: currentTitle };
-    form.computeLabel = (schema) => schema.name === "title" ? "Name" : schema.name;
+    form.computeLabel = (schema) => (schema.name === "title" ? "Name" : schema.name);
+
     const cancelBtn = document.createElement("ha-button");
     cancelBtn.slot = "secondaryAction";
     cancelBtn.setAttribute("appearance", "plain");
@@ -471,6 +411,9 @@ function showNativePopFormDialog(hass, { heading, initialTitle = "", confirmLabe
     cancelBtn.addEventListener("click", () => {
       dialog.open = false;
     });
+
+    // Bare <ha-button slot="primaryAction"> with no variant/appearance
+    // override, matching the native dialog's primary action exactly.
     const primaryBtn = document.createElement("ha-button");
     primaryBtn.slot = "primaryAction";
     primaryBtn.textContent = confirmLabel;
@@ -480,27 +423,56 @@ function showNativePopFormDialog(hass, { heading, initialTitle = "", confirmLabe
       dialog.open = false;
       resolve(currentTitle.trim());
     });
+
     form.addEventListener("value-changed", (ev) => {
       currentTitle = ev.detail.value.title || "";
       form.data = ev.detail.value;
       primaryBtn.disabled = !currentTitle.trim();
     });
+
     const footer = document.createElement("ha-dialog-footer");
     footer.slot = "footer";
     footer.appendChild(cancelBtn);
     footer.appendChild(primaryBtn);
+
     dialog.appendChild(form);
     dialog.appendChild(footer);
+
     dialog.addEventListener("closed", () => {
       dialog.remove();
       if (!resolved) {
         resolve(null);
       }
     });
+
     document.body.appendChild(dialog);
   });
 }
-var NativePopPanel = class extends HTMLElement {
+
+// Sidebar panel: list / create / rename / delete popups. Registered as
+// <nativepop-panel> by the integration's frontend.py (no manual YAML). HA
+// sets `.hass` (repeatedly, on every state change), `.narrow`, and `.panel`
+// (the panel_custom config) on this element.
+//
+// The list is a real <ha-data-table> (see file header for why this needed a
+// build step) - the same component Settings > Dashboards uses
+// (ha-config-lovelace-dashboards.ts), which gets us sortable columns,
+// clickable rows, an overflow menu per row, AND a built-in search box for
+// free (search box appears automatically once any column is `filterable`).
+//
+// The "+ New popup" button is a plain positioned <ha-button size="l">, not a
+// real FAB - HA itself removed the ha-fab component as of 2026.5 ("we use
+// just a normal ha-button now, since the position styling was always done
+// from the parent component"). The native page's FAB lives inside a
+// hass-tabs-subpage's `slot="fab"`, which only works within that specific
+// (much bigger) component; we replicate the visual with our own CSS instead.
+//
+// Create/rename use a real dialog (showNativePopFormDialog, above) built
+// from the same pieces HA's own dashboard create/edit dialog uses
+// (dialog-lovelace-dashboard-detail.ts): ha-dialog + ha-form + ha-dialog-footer
+// with primary/secondary ha-button. Delete stays a plain confirm() - a
+// destructive-action confirmation, not really part of "the list interface."
+class NativePopPanel extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     if (!this._initialized) {
@@ -508,12 +480,15 @@ var NativePopPanel = class extends HTMLElement {
       this._init();
     }
   }
+
   set panel(panel) {
     this._panel = panel;
   }
+
   set narrow(narrow) {
     this._narrow = narrow;
   }
+
   _columns() {
     return {
       icon: {
@@ -522,7 +497,7 @@ var NativePopPanel = class extends HTMLElement {
         type: "icon",
         minWidth: "56px",
         maxWidth: "56px",
-        template: () => b`<ha-icon icon="mdi:window-restore"></ha-icon>`
+        template: () => html`<ha-icon icon="mdi:window-restore"></ha-icon>`,
       },
       title: {
         title: "Name",
@@ -535,56 +510,59 @@ var NativePopPanel = class extends HTMLElement {
         // which class-based selectors from our light-DOM stylesheet can't
         // reach (CSS custom properties do cross that boundary, class
         // selectors don't).
-        template: (popup) => b`
+        template: (popup) => html`
           <div>${popup.title}</div>
           <div
             style="color: var(--secondary-text-color); font-size: 12px; cursor: pointer; width: fit-content;"
             title="Click to copy"
             @click=${(ev) => {
-          ev.stopPropagation();
-          this._copyToClipboard(`#${popup.url_path}`);
-        }}
+              // Row is clickable (opens edit mode) - stop this from also
+              // triggering that, since copying and editing are different intents.
+              ev.stopPropagation();
+              this._copyToClipboard(`#${popup.url_path}`);
+            }}
           >
             #${popup.url_path}
           </div>
-        `
+        `,
       },
       url_path: {
         title: "URL path",
         hidden: true,
-        filterable: true
+        filterable: true,
       },
       actions: {
         title: "",
         type: "overflow-menu",
         showNarrow: true,
-        template: (popup) => b`
+        template: (popup) => html`
           <ha-icon-overflow-menu
             .hass=${this._hass}
             narrow
             .items=${[
-          {
-            path: ICON_PATHS.renameBox,
-            label: "Rename",
-            action: () => this._renamePopup(popup)
-          },
-          {
-            path: ICON_PATHS.pencil,
-            label: "Edit",
-            action: () => this._editPopup(popup)
-          },
-          {
-            path: ICON_PATHS.deleteOutline,
-            label: "Delete",
-            action: () => this._deletePopup(popup),
-            warning: true
-          }
-        ]}
+              {
+                path: ICON_PATHS.renameBox,
+                label: "Rename",
+                action: () => this._renamePopup(popup),
+              },
+              {
+                path: ICON_PATHS.pencil,
+                label: "Edit",
+                action: () => this._editPopup(popup),
+              },
+              {
+                path: ICON_PATHS.deleteOutline,
+                label: "Delete",
+                action: () => this._deletePopup(popup),
+                warning: true,
+              },
+            ]}
           ></ha-icon-overflow-menu>
-        `
-      }
+        `,
+      },
     };
   }
+
   _init() {
     this.innerHTML = `
       <style>
@@ -616,31 +594,42 @@ var NativePopPanel = class extends HTMLElement {
         New popup
       </ha-button>
     `;
+
     const menuBtn = this.querySelector(".menu-btn");
     if (this._narrow) {
+      // Same event ha-menu-button itself dispatches on click (toggles the
+      // real sidebar) - see src/components/ha-menu-button.ts. We dispatch it
+      // directly instead of using <ha-menu-button> itself, since that reads
+      // Lit context that may not reach a panel_custom element reliably.
       menuBtn.addEventListener("click", () => {
         this.dispatchEvent(new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true }));
       });
     } else {
       menuBtn.style.display = "none";
     }
+
     this._table = this.querySelector("#table");
     this._table.columns = this._columns();
     this._table.searchLabel = "Search popups";
-    this._table.noDataText = "No popups yet \u2014 create one to get started.";
+    this._table.noDataText = "No popups yet — create one to get started.";
     this._table.addEventListener("row-click", (ev) => {
-      const popup = (this._popups || []).find((p2) => p2.id === ev.detail.id);
+      const popup = (this._popups || []).find((p) => p.id === ev.detail.id);
       if (popup) {
         this._editPopup(popup);
       }
     });
+
     this.querySelector("#create-btn").addEventListener("click", () => this._createPopup());
+
     this._refresh();
   }
+
   async _refresh() {
     const loadingEl = this.querySelector("#loading");
+
     loadingEl.hidden = false;
     this._table.hidden = true;
+
     let dashboards;
     try {
       dashboards = await this._hass.callWS({ type: "lovelace/dashboards/list" });
@@ -653,22 +642,33 @@ var NativePopPanel = class extends HTMLElement {
       this._table.data = [];
       return;
     }
-    this._popups = dashboards.filter((d2) => d2.url_path && d2.url_path.startsWith(POPUP_URL_PATH_PREFIX)).sort((a2, b2) => a2.title.localeCompare(b2.title));
+
+    this._popups = dashboards
+      .filter((d) => d.url_path && d.url_path.startsWith(POPUP_URL_PATH_PREFIX))
+      .sort((a, b) => a.title.localeCompare(b.title));
+
     loadingEl.hidden = true;
     this._table.hidden = false;
     this._table.hass = this._hass;
     this._table.data = this._popups;
   }
+
   _showToast(message) {
+    // Same event src/util/toast.ts's showToast() fires - a NotificationManager
+    // mounted at the app root listens for it and renders HA's real toast UI.
     this.dispatchEvent(
       new CustomEvent("hass-notification", { detail: { message }, bubbles: true, composed: true })
     );
   }
+
   async _copyToClipboard(text) {
     try {
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text);
       } else {
+        // navigator.clipboard needs a secure context (HTTPS/localhost) - a
+        // plain-HTTP local HA instance won't have it. Fall back to the
+        // older (deprecated but still universally supported) technique.
         const textarea = document.createElement("textarea");
         textarea.value = text;
         textarea.style.position = "fixed";
@@ -684,26 +684,30 @@ var NativePopPanel = class extends HTMLElement {
       alert("NativePop: could not copy to clipboard. See console for details.");
     }
   }
+
   // Opens the dashboard's native editor directly (spec 5.2) via HA's own
   // "?edit=1" query param convention (src/panels/lovelace/hui-root.ts).
   _editPopup(popup) {
     history.pushState(null, "", `/${popup.url_path}?edit=1`);
     fireLocationChanged();
   }
+
   async _renamePopup(popup) {
     const newTitle = await showNativePopFormDialog(this._hass, {
       heading: "Rename popup",
       initialTitle: popup.title,
-      confirmLabel: "Rename"
+      confirmLabel: "Rename",
     });
     if (!newTitle || newTitle === popup.title) {
       return;
     }
     try {
+      // Title only — url_path stays fixed, since triggers (hash,
+      // fire-dom-event, automations) are wired to it (see file header).
       await this._hass.callWS({
         type: "lovelace/dashboards/update",
         dashboard_id: popup.id,
-        title: newTitle
+        title: newTitle,
       });
     } catch (err) {
       console.error("NativePop: could not rename popup dashboard", err);
@@ -712,10 +716,11 @@ var NativePopPanel = class extends HTMLElement {
     }
     await this._refresh();
   }
+
   async _createPopup() {
     const title = await showNativePopFormDialog(this._hass, {
       heading: "Create popup",
-      confirmLabel: "Create"
+      confirmLabel: "Create",
     });
     if (!title) {
       return;
@@ -726,6 +731,7 @@ var NativePopPanel = class extends HTMLElement {
       return;
     }
     const urlPath = `${POPUP_URL_PATH_PREFIX}${slug}`;
+
     let dashboards;
     try {
       dashboards = await this._hass.callWS({ type: "lovelace/dashboards/list" });
@@ -734,10 +740,11 @@ var NativePopPanel = class extends HTMLElement {
       alert("NativePop: could not create popup. See console for details.");
       return;
     }
-    if (dashboards.some((d2) => d2.url_path === urlPath)) {
+    if (dashboards.some((d) => d.url_path === urlPath)) {
       alert(`NativePop: a popup with url_path "${urlPath}" already exists. Try a different name.`);
       return;
     }
+
     try {
       await this._hass.callWS({
         type: "lovelace/dashboards/create",
@@ -746,26 +753,32 @@ var NativePopPanel = class extends HTMLElement {
         title,
         icon: "mdi:window-restore",
         show_in_sidebar: false,
-        require_admin: false
+        require_admin: false,
       });
     } catch (err) {
       console.error("NativePop: could not create popup dashboard", err);
       alert("NativePop: could not create popup. See console for details.");
       return;
     }
+
+    // Dashboard creation doesn't let you set the view type - default it to a
+    // single "sections" view per spec 5.1. Non-fatal if this fails; the
+    // dashboard still exists, just with whatever HA's own fallback view is.
     try {
       await this._hass.callWS({
         type: "lovelace/config/save",
         url_path: urlPath,
-        config: { views: [{ title, type: "sections", sections: [] }] }
+        config: { views: [{ title, type: "sections", sections: [] }] },
       });
     } catch (err) {
       console.warn("NativePop: created popup but could not set its default view to sections", err);
     }
+
     await this._refresh();
     history.pushState(null, "", `/${urlPath}?edit=1`);
     fireLocationChanged();
   }
+
   async _deletePopup(popup) {
     if (!confirm(`Delete popup "${popup.title}"? This cannot be undone.`)) {
       return;
@@ -779,21 +792,31 @@ var NativePopPanel = class extends HTMLElement {
     }
     await this._refresh();
   }
-};
+}
+
 customElements.define("nativepop-panel", NativePopPanel);
-var NativePopPocCard = class extends HTMLElement {
+
+// Test harness card: configurable `popup:` slug, one button per trigger
+// path, each going through the SAME generic mechanism a plain native card
+// would use (dispatching ll-custom / setting location.hash) rather than
+// calling the internal functions directly — so this also validates the
+// listeners above, not just the dialog mount itself.
+class NativePopPocCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
     this._popup = this._config.popup || DEFAULT_POPUP_URL_PATH;
   }
+
   set hass(hass) {
     this._hass = hass;
   }
+
   connectedCallback() {
     if (this._rendered) {
       return;
     }
     this._rendered = true;
+
     this.innerHTML = `
       <ha-card header="NativePop PoC">
         <div style="padding: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
@@ -802,38 +825,35 @@ var NativePopPocCard = class extends HTMLElement {
         </div>
       </ha-card>
     `;
+
     this.querySelector("#direct-btn").addEventListener("click", () => {
       this.dispatchEvent(
         new CustomEvent("ll-custom", {
           detail: { action: "fire-dom-event", nativepop_popup: this._popup },
           bubbles: true,
-          composed: true
+          composed: true,
         })
       );
     });
+
     this.querySelector("#hash-btn").addEventListener("click", () => {
       weSetHashOurselves = true;
-      location.hash = this._popup;
+      location.hash = this._popup; // handleLocationChange() does the actual opening
     });
   }
+
   getCardSize() {
     return 2;
   }
-};
+}
+
 customElements.define("nativepop-poc-card", NativePopPocCard);
+
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "nativepop-poc-card",
   name: "NativePop PoC",
-  description: "Proof-of-concept test harness trigger for NativePop popups."
+  description: "Proof-of-concept test harness trigger for NativePop popups.",
 });
-console.info("NativePop: milestone 5 loaded (panel now uses ha-data-table: sortable columns, search, overflow menu)");
-/*! Bundled license information:
 
-lit-html/lit-html.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
-   * SPDX-License-Identifier: BSD-3-Clause
-   *)
-*/
+console.info("NativePop: milestone 5 loaded (panel now uses ha-data-table: sortable columns, search, overflow menu)");

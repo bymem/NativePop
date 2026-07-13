@@ -6,6 +6,25 @@ editor, trigger via tap or navigation, reusable across dashboards.
 See [ha-popup-builder-spec.md](ha-popup-builder-spec.md) for the full technical
 spec and milestone plan.
 
+## Development
+
+This repo now has a small build step — `src/nativepop.js` is the real
+source; `custom_components/nativepop/www/nativepop.js` (what HACS/HA
+actually serve) is a **build artifact**, bundled via esbuild, and must be
+committed alongside any source change:
+
+```bash
+npm install     # first time only
+npm run build   # after any change to src/nativepop.js
+```
+
+The build step exists specifically because `ha-data-table`'s column
+templates need `lit-html`'s `html` tag (see the panel's source comments) —
+everything else in this project stays plain, dependency-free JS. A GitHub
+Actions workflow (`.github/workflows/verify-build.yml`) fails CI if `src/`
+changes without a matching rebuild, so a stale build artifact can't silently
+slip through a PR.
+
 ## Status: Milestone 5 (polish)
 
 All trigger paths are slug-driven and usable without any NativePop-specific
@@ -56,14 +75,17 @@ every trigger (hash, fire-dom-event, automation) is wired to it.
   mwc-dialog's cramped default.
 - Close-on-outside-click turned out to already work by default (`ha-dialog`'s
   own behavior) — verified, no code needed.
-- The Popup Manager panel got a visual pass, revised once already: the first
-  attempt used `ha-list`/`ha-list-item` (matching Settings > Dashboards'
-  general shape) but the row action buttons never rendered — that component's
-  `hasMeta`/slot contract couldn't be confirmed without live-testing. Rows are
-  now plain styled divs using only two individually-verified pieces
-  (`ha-icon`, `ha-icon-button`), which removes that whole class of risk. Still
-  themed with real HA CSS variables (divider color, secondary text color,
-  primary color).
+- The Popup Manager panel's list went through two revisions before landing on
+  `ha-data-table` — the actual component Settings > Dashboards uses. First
+  attempt: `ha-list`/`ha-list-item`, whose row actions never rendered
+  (unconfirmable `hasMeta`/slot contract). Second: plain styled divs, which
+  worked but wasn't the real thing. Now it's a real `ha-data-table`: sortable
+  "Name" column (with url_path as secondary text), a built-in search box
+  (appears automatically once a column is `filterable` — no custom search
+  code needed), clickable rows (opens edit mode), and a per-row overflow
+  ("⋮") menu for Rename/Edit/Delete, matching the native page's own row
+  actions. This is also why the project now has a build step — see
+  "Development" above.
 - "+ New popup" moved out of the toolbar to a fixed bottom-right button,
   matching where Settings > Dashboards puts its "Add dashboard" action (a
   FAB in the native page). HA itself removed the dedicated `ha-fab` component
@@ -82,6 +104,10 @@ every trigger (hash, fire-dom-event, automation) is wired to it.
   `navigator.clipboard` isn't available — which it won't be over plain HTTP,
   e.g. a local HA instance without TLS, since that API requires a secure
   context.
+- Create and rename no longer use a browser `prompt()` — they now open a real
+  dialog built from the exact same pieces HA's own "create/edit dashboard"
+  dialog uses (`ha-dialog` + a schema-driven `ha-form` + `ha-dialog-footer`
+  with Cancel/Create `ha-button`s), instead of an approximation.
 
 **Delivery model changed this milestone.** NativePop is no longer a
 frontend-only HACS "plugin" — it's now a small companion integration
@@ -169,28 +195,35 @@ just HA storage dashboards, untouched by any of this.
     pick "Fire an event", set Event Type to `nativepop_open_popup` and Event
     Data to `popup: popup-test`, then perform the action — the popup should
     open with no card or tap involved.
-12. **Popup Manager panel**:
-    - Existing popups should show up in the list, each with a leading icon,
-      the title, and `#<url_path>` as secondary text — and, importantly this
-      time, three action icons (rename/edit/delete) visible on the right.
-    - Click the `#<url_path>` text — should copy it and show a toast
-      ("Copied ... to clipboard"). If your HA is plain HTTP, this exercises
-      the execCommand fallback rather than the Clipboard API — worth
-      confirming it actually copies (paste it somewhere) rather than just
-      showing the toast.
-    - "+ New popup" (now bottom-right) should render as a filled, pill-shaped
+12. **Popup Manager panel** (now a real `ha-data-table`, same as Settings >
+    Dashboards):
+    - Existing popups should show up as rows: leading icon, title with
+      `#url_path` underneath as secondary text, and a "⋮" overflow menu on
+      the right.
+    - A **search box** should appear above the list automatically (no setup
+      needed) — type part of a popup's name or url_path and confirm it
+      filters the rows live.
+    - Clicking the "Name" column header should sort the list; clicking it
+      again should reverse the sort.
+    - Click the `#url_path` secondary text — should copy it and show a toast
+      ("Copied ... to clipboard") **without** also opening edit mode (they're
+      stacked, but stopPropagation keeps them independent — worth confirming
+      both still work on their own). If your HA is plain HTTP, this exercises
+      the execCommand fallback rather than the Clipboard API — worth actually
+      pasting it somewhere to confirm it copied, not just that the toast
+      showed.
+    - Clicking anywhere else on a row should open that dashboard in edit mode.
+    - The "⋮" menu should offer Rename / Edit / Delete. Edit matches the row
+      click. Rename opens the same style of dialog as create, pre-filled with
+      the current name (url_path/hash stays the same after — check an
+      existing trigger still works). Delete asks for confirmation, then
+      removes it and refreshes the list.
+    - "+ New popup" (bottom-right) should render as a filled, pill-shaped
       button in your theme's accent color, matching Settings > Dashboards'
-      "Add dashboard" button. Enter a name, confirm it creates a hidden
-      dashboard, defaults its view to `type: sections`, and drops you
-      straight into edit mode.
-    - Pencil icon ("Edit") on any row should open that dashboard in edit mode.
-    - Rename icon on any row should prompt for a new name and update the
-      title in place (url_path/hash stays the same — check an existing
-      trigger still works afterward).
-    - Trash icon ("Delete") should remove it (with a confirmation prompt) and
-      refresh the list.
+      "Add dashboard" button. Same create dialog as before.
     - On a narrow window (or the companion app), check the hamburger icon in
-      the panel's toolbar actually opens the sidebar.
+      the panel's toolbar actually opens the sidebar, and that the overflow
+      menu still works (its layout is supposed to adapt on narrow screens).
 13. **Dialog polish** — open any popup and confirm: it opens noticeably
     wider than before; briefly shows a spinner before content appears (may be
     too fast to see on a fast connection/LAN, that's fine); and clicking

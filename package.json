@@ -1,0 +1,14 @@
+{
+  "name": "nativepop-frontend",
+  "private": true,
+  "description": "Build step for NativePop's frontend module - bundles lit-html (needed for ha-data-table's column templates) into the plain-JS file the integration serves.",
+  "scripts": {
+    "build": "esbuild src/nativepop.js --bundle --format=esm --outfile=custom_components/nativepop/www/nativepop.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  },
+  "dependencies": {
+    "lit-html": "^3.2.0"
+  }
+}

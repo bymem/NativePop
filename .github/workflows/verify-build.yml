@@ -1,0 +1,42 @@
+name: Verify frontend build is up to date
+
+# custom_components/nativepop/www/nativepop.js is a build artifact (bundled
+# from src/nativepop.js via esbuild - see package.json), committed to the
+# repo since HACS/HA just copy custom_components/ as-is, with no build step
+# of their own. This check fails if someone edits src/ and forgets to
+# `npm run build` + commit the result before pushing.
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "custom_components/nativepop/www/**"
+      - "package.json"
+      - "package-lock.json"
+  pull_request:
+    paths:
+      - "src/**"
+      - "custom_components/nativepop/www/**"
+      - "package.json"
+      - "package-lock.json"
+
+jobs:
+  verify-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Check build output matches what's committed
+        run: |
+          if ! git diff --exit-code -- custom_components/nativepop/www/nativepop.js; then
+            echo "::error::custom_components/nativepop/www/nativepop.js is out of date." \
+              "Run 'npm run build' and commit the result."
+            exit 1
+          fi

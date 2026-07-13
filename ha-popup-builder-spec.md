@@ -79,7 +79,13 @@ companion integration's Python (see 5.7) — not a manual `configuration.yaml`
 entry — providing:
 
 - List of all popup dashboards (filtered by URL path prefix or a config registry —
-  see 5.5).
+  see 5.5), rendered as a real `ha-data-table` *(done, milestone 5)* — the same
+  component Settings > Dashboards uses (`ha-config-lovelace-dashboards.ts`), not an
+  approximation. Gets sortable columns, clickable rows (opens edit mode), a
+  built-in search box (automatic once a column is `filterable` — no custom search
+  code needed, satisfying the "add search" ask directly), and a per-row overflow
+  menu (Rename/Edit/Delete) for free. This is what forced the build-step reversal
+  in 5.8.
 - Create new popup (prompts for name → creates hidden dashboard, opens it in edit mode).
 - Rename / delete popup. Rename changes the `title` only (via `lovelace/dashboards/update`)
   — the `url_path`/slug stays fixed, since triggers (hash, fire-dom-event, automations)
@@ -201,6 +207,38 @@ exactly this kind of frontend-only functionality with better ergonomics:
   (b) it removes both a manual YAML step and an unverified assumption about
   Lovelace-resource load timing.
 
+### 5.8 Frontend build step
+
+Originally scoped as a single plain JS file, no build tooling at all (see the
+project's very first milestone) — a deliberate simplicity choice, and one that held
+through milestone 4. Reversed at milestone 5, when the Popup Manager panel's list
+needed to become a real `ha-data-table` (the actual component Settings > Dashboards
+uses, not an approximation — see 5.2) to genuinely support search/sort/an overflow
+menu rather than hand-rolled equivalents.
+
+- The blocker: `ha-data-table` column cells needing anything beyond plain text
+  (icons, the overflow menu) require a `column.template` function returning a real
+  Lit `TemplateResult` — a plain HTML string gets auto-escaped as literal text by
+  Lit's own XSS protection, not parsed as markup. That needs `lit-html`'s `html` tag,
+  which isn't reachable without bundling.
+- `src/nativepop.js` is now the real source (imports `lit-html`);
+  `custom_components/nativepop/www/nativepop.js` is a **build artifact** (esbuild,
+  see `package.json`), committed to the repo since HACS/HA copy
+  `custom_components/` as-is with no build step of their own — whatever's committed
+  there is exactly what installs.
+- A GitHub Actions workflow (`.github/workflows/verify-build.yml`) rebuilds from
+  source on every push touching `src/` or the build output, and fails CI if the
+  committed artifact doesn't match — catches a forgotten `npm run build` before it
+  reaches a release.
+- Scope stayed narrow: `lit-html` (the templating runtime) is used *only* for
+  `ha-data-table`'s column templates. Everything else in the project — the trigger
+  listeners, the dialog mount, the create/rename dialog, the two custom elements —
+  stays plain, dependency-free JS, unchanged by this pivot.
+- Multiple `lit-html` copies (ours, bundled; HA's own, already loaded) coexisting on
+  one page is safe by design — lit-html's `TemplateResult` recognition is duck-typed
+  (a marker property), not an `instanceof`/module-identity check, specifically so
+  independently-bundled consumers don't conflict.
+
 ## 6. Data flow
 
 ```
@@ -300,6 +338,22 @@ exactly this kind of frontend-only functionality with better ergonomics:
      system (`@home-assistant/webawesome`), so `mwc-button`'s CSS variables
      never had any effect on it. Fixed by using bare `<ha-button size="l">`,
      matching the native usage exactly instead of a lookalike.
+   - Create/rename still used a browser `prompt()` for the name input after
+     both of the above fixes — visually the most glaring remaining
+     non-native piece. Replaced with a real dialog built from the same
+     components HA's own dashboard create/edit dialog uses
+     (`dialog-lovelace-dashboard-detail.ts`): `ha-dialog` + a schema-driven
+     `ha-form` (`schema: [{name: "title", required: true, selector: {text:
+     {}}}]`) + `ha-dialog-footer` with Cancel/Create `ha-button`s in the
+     `secondaryAction`/`primaryAction` slots. Delete stays a plain
+     `confirm()` — a destructive-action confirmation reads differently from
+     "the creation interface," and was out of scope for this pass.
+   - The list itself: even after the row-markup fix above, it was still
+     hand-rolled divs, not the real "Manage dashboards" list Mikkel kept
+     pointing back to. Replaced with an actual `ha-data-table` (see 5.2,
+     5.8) — which also directly delivered the requested search feature, and
+     forced the project's build-step reversal since the table's icon/action
+     columns need real Lit templates.
 
    Mobile-specific behavior (companion app testing) still outstanding — no
    way to verify without a physical device.
