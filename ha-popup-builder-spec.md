@@ -218,8 +218,11 @@ storage helper if metadata needs grow.
    question in favor of `navigate` as the primary tap trigger (see 5.4); added the
    automation "Fire an event" trigger (see 5.5), not originally scoped but a natural
    extension of "generalize trigger paths."
-4. **Sidebar panel v1**: list/create/delete popups (naming-convention based, no
-   backend), create opens native dashboard editor directly.
+4. **Sidebar panel v1** *(done)*: list/create/delete popups (naming-convention
+   based, no backend), create opens native dashboard editor directly
+   (`?edit=1`). Registered via `panel_custom` (one manual configuration.yaml
+   entry — no way around this without a backend component). Rename deferred
+   to milestone 5, as originally scoped.
 5. **Polish**: rename support, dialog sizing/mobile behavior, close-on-outside-click,
    loading state while config fetches.
 6. **(Optional v2)**: metadata registry/backend helper if naming convention proves
@@ -232,9 +235,17 @@ storage helper if metadata needs grow.
   card. `tap_action: navigate` to a `#popup-<slug>` hash is the primary mechanism
   (visual-editor friendly); `fire-dom-event` works too but is YAML-only since HA
   removed it from the visual action picker, so it's a fallback, not the primary path.
-- Should popup dashboards default to `type: sections` (native grid) or leave that as
-  a user choice at creation time?
-- Where does the global hash listener live so it's always loaded (a small always-on
-  Lovelace resource vs. bundled into the sidebar panel's module)?
+- ~~Should popup dashboards default to `type: sections` (native grid) or leave that as
+  a user choice at creation time?~~ **Resolved (milestone 4)**: defaults to `sections`,
+  set via a `lovelace/config/save` call right after `lovelace/dashboards/create` (which
+  has no view-type field of its own). No creation-time override in v1.
+- ~~Where does the global hash listener live so it's always loaded (a small always-on
+  Lovelace resource vs. bundled into the sidebar panel's module)?~~ **Resolved (milestone
+  4)**: same single file for both — the sidebar panel's `panel_custom.module_url` points
+  at the identical `NativePop.js` already registered as a Lovelace resource (ES modules
+  are cached/evaluated once per URL, so no duplicate listeners). Still relies on the
+  Lovelace resource being loaded before the trigger listeners are live, which holds for
+  normal dashboard usage but not yet verified for every HA surface (e.g. a cold load
+  landing directly on `/config` or another non-Lovelace panel first).
 - Minimum supported HA core version (affects whether `hui-view` mount patterns from
   older reverse-engineering write-ups still apply).

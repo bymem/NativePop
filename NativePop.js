@@ -50,8 +50,16 @@
 // already uses. This broadcasts to every connected frontend session (same
 // as any other HA event) — there's no per-browser/per-user targeting in v1;
 // that would need the kind of backend component the spec avoids for now.
+//
+// Milestone 4: sidebar panel ("Popup Manager"), registered via HA's built-in
+// `panel_custom` integration (a configuration.yaml entry is required — see
+// README, since a frontend resource can't register a sidebar panel purely on
+// its own). List/create/delete only in v1, naming-convention based (any
+// dashboard whose url_path starts with "popup-" counts, per spec 5.6 — no
+// backend/metadata registry). Rename is milestone 5.
 
-const POPUP_HASH_PREFIX = "#popup-";
+const POPUP_URL_PATH_PREFIX = "popup-";
+const POPUP_HASH_PREFIX = `#${POPUP_URL_PATH_PREFIX}`;
 const DEFAULT_POPUP_URL_PATH = "popup-test"; // fallback for the PoC card only
 
 let currentDialog = null;
@@ -69,6 +77,13 @@ let weSetHashOurselves = false;
 function getHass() {
   const haEl = document.querySelector("home-assistant");
   return haEl ? haEl.hass : undefined;
+}
+
+// After a programmatic history.pushState(), HA's own router needs this event
+// to notice the URL changed and re-render (same event navigate() fires
+// itself — see src/common/navigate.ts, and the file header above).
+function fireLocationChanged() {
+  window.dispatchEvent(new CustomEvent("location-changed", { bubbles: true, composed: true }));
 }
 
 // "#popup-<slug>" -> "popup-<slug>" (the dashboard's url_path, per spec 5.1
@@ -266,6 +281,195 @@ const NATIVEPOP_EVENT_TYPE = "nativepop_open_popup";
   tick();
 })();
 
+function slugify(text) {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// Sidebar panel: list / create / delete popups. Registered as
+// <nativepop-panel> via panel_custom (README has the configuration.yaml
+// snippet). HA sets `.hass` (repeatedly, on every state change) and `.panel`
+// (the panel_custom config) on this element.
+class NativePopPanel extends HTMLElement {
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._initialized) {
+      this._initialized = true;
+      this._init();
+    }
+  }
+
+  set panel(panel) {
+    this._panel = panel;
+  }
+
+  _init() {
+    this.innerHTML = `
+      <style>
+        :host { display: block; height: 100%; box-sizing: border-box; overflow: auto; }
+        .header {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 16px; border-bottom: 1px solid var(--divider-color);
+        }
+        .header h1 { font-size: 20px; margin: 0; }
+        .list { padding: 16px; max-width: 600px; margin: 0 auto; }
+        .popup-row {
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 8px;
+          padding: 12px 16px; margin-bottom: 8px;
+          border: 1px solid var(--divider-color); border-radius: 8px;
+        }
+        .popup-row .info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .popup-row .info span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .popup-row .url-path { font-family: monospace; font-size: 12px; color: var(--secondary-text-color); }
+        .popup-row .actions { flex-shrink: 0; }
+        .empty { padding: 32px 16px; text-align: center; color: var(--secondary-text-color); }
+      </style>
+      <div class="header">
+        <h1>Popup Manager</h1>
+        <mwc-button raised id="create-btn">+ New popup</mwc-button>
+      </div>
+      <div class="list" id="list">Loading…</div>
+    `;
+
+    this.querySelector("#create-btn").addEventListener("click", () => this._createPopup());
+
+    this._refresh();
+  }
+
+  async _refresh() {
+    const listEl = this.querySelector("#list");
+
+    let dashboards;
+    try {
+      dashboards = await this._hass.callWS({ type: "lovelace/dashboards/list" });
+    } catch (err) {
+      console.error("NativePop: could not list dashboards", err);
+      listEl.textContent = "Could not load popups. See console for details.";
+      return;
+    }
+
+    const popups = dashboards
+      .filter((d) => d.url_path && d.url_path.startsWith(POPUP_URL_PATH_PREFIX))
+      .sort((a, b) => a.title.localeCompare(b.title));
+
+    if (popups.length === 0) {
+      listEl.innerHTML = `<div class="empty">No popups yet — create one to get started.</div>`;
+      return;
+    }
+
+    listEl.innerHTML = "";
+    for (const popup of popups) {
+      const row = document.createElement("div");
+      row.className = "popup-row";
+      row.innerHTML = `
+        <div class="info">
+          <span>${this._escape(popup.title)}</span>
+          <span class="url-path">#${this._escape(popup.url_path)}</span>
+        </div>
+        <div class="actions">
+          <mwc-button dense class="edit-btn">Edit</mwc-button>
+          <mwc-button dense class="delete-btn">Delete</mwc-button>
+        </div>
+      `;
+      row.querySelector(".edit-btn").addEventListener("click", () => this._editPopup(popup));
+      row.querySelector(".delete-btn").addEventListener("click", () => this._deletePopup(popup));
+      listEl.appendChild(row);
+    }
+  }
+
+  _escape(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // Opens the dashboard's native editor directly (spec 5.2) via HA's own
+  // "?edit=1" query param convention (src/panels/lovelace/hui-root.ts).
+  _editPopup(popup) {
+    history.pushState(null, "", `/${popup.url_path}?edit=1`);
+    fireLocationChanged();
+  }
+
+  async _createPopup() {
+    const title = prompt('Popup name (e.g. "Washing machine"):');
+    if (!title) {
+      return;
+    }
+    const slug = slugify(title);
+    if (!slug) {
+      alert("NativePop: please use a name with at least one letter or number.");
+      return;
+    }
+    const urlPath = `${POPUP_URL_PATH_PREFIX}${slug}`;
+
+    let dashboards;
+    try {
+      dashboards = await this._hass.callWS({ type: "lovelace/dashboards/list" });
+    } catch (err) {
+      console.error("NativePop: could not check existing popups", err);
+      alert("NativePop: could not create popup. See console for details.");
+      return;
+    }
+    if (dashboards.some((d) => d.url_path === urlPath)) {
+      alert(`NativePop: a popup with url_path "${urlPath}" already exists. Try a different name.`);
+      return;
+    }
+
+    try {
+      await this._hass.callWS({
+        type: "lovelace/dashboards/create",
+        url_path: urlPath,
+        mode: "storage",
+        title,
+        icon: "mdi:window-restore",
+        show_in_sidebar: false,
+        require_admin: false,
+      });
+    } catch (err) {
+      console.error("NativePop: could not create popup dashboard", err);
+      alert("NativePop: could not create popup. See console for details.");
+      return;
+    }
+
+    // Dashboard creation doesn't let you set the view type - default it to a
+    // single "sections" view per spec 5.1. Non-fatal if this fails; the
+    // dashboard still exists, just with whatever HA's own fallback view is.
+    try {
+      await this._hass.callWS({
+        type: "lovelace/config/save",
+        url_path: urlPath,
+        config: { views: [{ title, type: "sections", sections: [] }] },
+      });
+    } catch (err) {
+      console.warn("NativePop: created popup but could not set its default view to sections", err);
+    }
+
+    await this._refresh();
+    history.pushState(null, "", `/${urlPath}?edit=1`);
+    fireLocationChanged();
+  }
+
+  async _deletePopup(popup) {
+    if (!confirm(`Delete popup "${popup.title}"? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await this._hass.callWS({ type: "lovelace/dashboards/delete", dashboard_id: popup.id });
+    } catch (err) {
+      console.error("NativePop: could not delete popup dashboard", err);
+      alert("NativePop: could not delete popup. See console for details.");
+      return;
+    }
+    await this._refresh();
+  }
+}
+
+customElements.define("nativepop-panel", NativePopPanel);
+
 // Test harness card: configurable `popup:` slug, one button per trigger
 // path, each going through the SAME generic mechanism a plain native card
 // would use (dispatching ll-custom / setting location.hash) rather than
@@ -326,4 +530,4 @@ window.customCards.push({
   description: "Milestone 1-3 proof of concept trigger for NativePop popups.",
 });
 
-console.info("NativePop: milestone 3 PoC card loaded");
+console.info("NativePop: milestone 4 loaded (PoC card + Popup Manager panel)");
