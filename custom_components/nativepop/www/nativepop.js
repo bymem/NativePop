@@ -261,6 +261,17 @@ function getHass() {
   const haEl = document.querySelector("home-assistant");
   return haEl ? haEl.hass : void 0;
 }
+function isNarrow() {
+  const haEl = document.querySelector("home-assistant");
+  return !!(haEl && haEl.narrow);
+}
+function sanitizeDialogWidth(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return /^\d+(\.\d+)?(px|%|vw|rem|em)$/.test(trimmed) ? trimmed : null;
+}
 function fireLocationChanged() {
   window.dispatchEvent(new CustomEvent("location-changed", { bubbles: true, composed: true }));
 }
@@ -309,7 +320,9 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   const dialog = document.createElement("ha-dialog");
   dialog.heading = "NativePop";
   dialog.open = true;
-  dialog.style.setProperty("--ha-dialog-width-md", "min(90vw, 1024px)");
+  if (!isNarrow()) {
+    dialog.style.setProperty("--ha-dialog-width-md", "min(90vw, 1024px)");
+  }
   const content = document.createElement("div");
   content.className = "nativepop-loading";
   content.innerHTML = `<div class="nativepop-spinner"></div><span>Loading popup\u2026</span>`;
@@ -352,6 +365,14 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   }
   if (currentDialog !== dialog) {
     return;
+  }
+  if (!isNarrow()) {
+    const customWidth = sanitizeDialogWidth(
+      lovelaceConfig.views && lovelaceConfig.views[0] && lovelaceConfig.views[0].nativepop_dialog_width
+    );
+    if (customWidth) {
+      dialog.style.setProperty("--ha-dialog-width-md", customWidth);
+    }
   }
   const lovelace = {
     config: lovelaceConfig,
@@ -452,18 +473,38 @@ var NATIVEPOP_EVENT_TYPE = "nativepop_open_popup";
 function slugify(text) {
   return text.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
-function showNativePopFormDialog(hass, { heading, initialTitle = "", confirmLabel }) {
+var POPUP_FORM_SCHEMA = [
+  { name: "title", required: true, selector: { text: {} } },
+  { name: "width", required: false, selector: { text: {} } }
+];
+function computePopupFormLabel(schema) {
+  if (schema.name === "title") {
+    return "Name";
+  }
+  if (schema.name === "width") {
+    return "Dialog width (desktop only)";
+  }
+  return schema.name;
+}
+function computePopupFormHelper(schema) {
+  if (schema.name === "width") {
+    return 'e.g. "800px" or "70%" - leave blank for the default. Narrow/mobile screens always open full width, regardless of this setting.';
+  }
+  return "";
+}
+function showNativePopFormDialog(hass, { heading, data, confirmLabel }) {
   return new Promise((resolve) => {
-    let currentTitle = initialTitle;
+    let currentData = { ...data };
     let resolved = false;
     const dialog = document.createElement("ha-dialog");
     dialog.heading = heading;
     dialog.open = true;
     const form = document.createElement("ha-form");
     form.hass = hass;
-    form.schema = [{ name: "title", required: true, selector: { text: {} } }];
-    form.data = { title: currentTitle };
-    form.computeLabel = (schema) => schema.name === "title" ? "Name" : schema.name;
+    form.schema = POPUP_FORM_SCHEMA;
+    form.data = currentData;
+    form.computeLabel = computePopupFormLabel;
+    form.computeHelper = computePopupFormHelper;
     const cancelBtn = document.createElement("ha-button");
     cancelBtn.slot = "secondaryAction";
     cancelBtn.setAttribute("appearance", "plain");
@@ -474,16 +515,16 @@ function showNativePopFormDialog(hass, { heading, initialTitle = "", confirmLabe
     const primaryBtn = document.createElement("ha-button");
     primaryBtn.slot = "primaryAction";
     primaryBtn.textContent = confirmLabel;
-    primaryBtn.disabled = !currentTitle.trim();
+    primaryBtn.disabled = !currentData.title.trim();
     primaryBtn.addEventListener("click", () => {
       resolved = true;
       dialog.open = false;
-      resolve(currentTitle.trim());
+      resolve(currentData);
     });
     form.addEventListener("value-changed", (ev) => {
-      currentTitle = ev.detail.value.title || "";
-      form.data = ev.detail.value;
-      primaryBtn.disabled = !currentTitle.trim();
+      currentData = ev.detail.value;
+      form.data = currentData;
+      primaryBtn.disabled = !(currentData.title || "").trim();
     });
     const footer = document.createElement("ha-dialog-footer");
     footer.slot = "footer";
@@ -556,31 +597,41 @@ var NativePopPanel = class extends HTMLElement {
       },
       actions: {
         title: "",
-        type: "overflow-menu",
+        minWidth: "144px",
+        maxWidth: "144px",
         showNarrow: true,
+        // Three plain ha-icon-buttons instead of an overflow menu - Mikkel
+        // wants all three actions visible on the row, not collapsed behind
+        // a "⋮". Using .path= directly (real SVG data, see ICON_PATHS) now
+        // that real Lit templates are available, rather than the
+        // slotted-<ha-icon> fallback used before the build step existed.
         template: (popup) => b`
-          <ha-icon-overflow-menu
-            .hass=${this._hass}
-            narrow
-            .items=${[
-          {
-            path: ICON_PATHS.renameBox,
-            label: "Rename",
-            action: () => this._renamePopup(popup)
-          },
-          {
-            path: ICON_PATHS.pencil,
-            label: "Edit",
-            action: () => this._editPopup(popup)
-          },
-          {
-            path: ICON_PATHS.deleteOutline,
-            label: "Delete",
-            action: () => this._deletePopup(popup),
-            warning: true
-          }
-        ]}
-          ></ha-icon-overflow-menu>
+          <div style="display: flex;">
+            <ha-icon-button
+              .path=${ICON_PATHS.renameBox}
+              label="Rename"
+              @click=${(ev) => {
+          ev.stopPropagation();
+          this._renamePopup(popup);
+        }}
+            ></ha-icon-button>
+            <ha-icon-button
+              .path=${ICON_PATHS.pencil}
+              label="Edit"
+              @click=${(ev) => {
+          ev.stopPropagation();
+          this._editPopup(popup);
+        }}
+            ></ha-icon-button>
+            <ha-icon-button
+              .path=${ICON_PATHS.deleteOutline}
+              label="Delete"
+              @click=${(ev) => {
+          ev.stopPropagation();
+          this._deletePopup(popup);
+        }}
+            ></ha-icon-button>
+          </div>
         `
       }
     };
@@ -598,7 +649,7 @@ var NativePopPanel = class extends HTMLElement {
           position: sticky; top: 0; z-index: 1;
         }
         .toolbar .title { font-size: 20px; font-weight: 400; flex: 1; }
-        .content { padding-bottom: 88px; max-width: 900px; margin: 0 auto; }
+        .content { padding-bottom: 88px; }
         .fab-button {
           position: fixed; bottom: 16px; right: 16px; z-index: 2;
         }
@@ -691,35 +742,79 @@ var NativePopPanel = class extends HTMLElement {
     fireLocationChanged();
   }
   async _renamePopup(popup) {
-    const newTitle = await showNativePopFormDialog(this._hass, {
-      heading: "Rename popup",
-      initialTitle: popup.title,
-      confirmLabel: "Rename"
-    });
-    if (!newTitle || newTitle === popup.title) {
+    let config;
+    try {
+      config = await this._hass.callWS({ type: "lovelace/config", url_path: popup.url_path });
+    } catch (err) {
+      console.error("NativePop: could not load popup config for rename", err);
+      alert("NativePop: could not load popup. See console for details.");
       return;
     }
-    try {
-      await this._hass.callWS({
-        type: "lovelace/dashboards/update",
-        dashboard_id: popup.id,
-        title: newTitle
-      });
-    } catch (err) {
-      console.error("NativePop: could not rename popup dashboard", err);
-      alert("NativePop: could not rename popup. See console for details.");
+    const currentWidth = config.views && config.views[0] && config.views[0].nativepop_dialog_width || "";
+    const result = await showNativePopFormDialog(this._hass, {
+      heading: "Rename popup",
+      data: { title: popup.title, width: currentWidth },
+      confirmLabel: "Save"
+    });
+    if (!result) {
       return;
+    }
+    const newTitle = (result.title || "").trim();
+    const newWidth = sanitizeDialogWidth(result.width) || "";
+    const titleChanged = newTitle && newTitle !== popup.title;
+    const widthChanged = newWidth !== currentWidth;
+    if (!titleChanged && !widthChanged) {
+      return;
+    }
+    if (titleChanged) {
+      try {
+        await this._hass.callWS({
+          type: "lovelace/dashboards/update",
+          dashboard_id: popup.id,
+          title: newTitle
+        });
+      } catch (err) {
+        console.error("NativePop: could not rename popup dashboard", err);
+        alert("NativePop: could not rename popup. See console for details.");
+        return;
+      }
+    }
+    if (widthChanged) {
+      const views = config.views ? [...config.views] : [{ type: "sections", sections: [] }];
+      const view = { ...views[0] };
+      if (newWidth) {
+        view.nativepop_dialog_width = newWidth;
+      } else {
+        delete view.nativepop_dialog_width;
+      }
+      views[0] = view;
+      try {
+        await this._hass.callWS({
+          type: "lovelace/config/save",
+          url_path: popup.url_path,
+          config: { ...config, views }
+        });
+      } catch (err) {
+        console.error("NativePop: could not save popup dialog width", err);
+        alert("NativePop: could not save the dialog width. See console for details.");
+      }
     }
     await this._refresh();
   }
   async _createPopup() {
-    const title = await showNativePopFormDialog(this._hass, {
+    const result = await showNativePopFormDialog(this._hass, {
       heading: "Create popup",
+      data: { title: "", width: "" },
       confirmLabel: "Create"
     });
+    if (!result) {
+      return;
+    }
+    const title = (result.title || "").trim();
     if (!title) {
       return;
     }
+    const width = sanitizeDialogWidth(result.width);
     const slug = slugify(title);
     if (!slug) {
       alert("NativePop: please use a name with at least one letter or number.");
@@ -753,11 +848,15 @@ var NativePopPanel = class extends HTMLElement {
       alert("NativePop: could not create popup. See console for details.");
       return;
     }
+    const viewConfig = { title, type: "sections", sections: [] };
+    if (width) {
+      viewConfig.nativepop_dialog_width = width;
+    }
     try {
       await this._hass.callWS({
         type: "lovelace/config/save",
         url_path: urlPath,
-        config: { views: [{ title, type: "sections", sections: [] }] }
+        config: { views: [viewConfig] }
       });
     } catch (err) {
       console.warn("NativePop: created popup but could not set its default view to sections", err);

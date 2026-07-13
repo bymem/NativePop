@@ -75,17 +75,25 @@ every trigger (hash, fire-dom-event, automation) is wired to it.
   mwc-dialog's cramped default.
 - Close-on-outside-click turned out to already work by default (`ha-dialog`'s
   own behavior) — verified, no code needed.
-- The Popup Manager panel's list went through two revisions before landing on
-  `ha-data-table` — the actual component Settings > Dashboards uses. First
-  attempt: `ha-list`/`ha-list-item`, whose row actions never rendered
-  (unconfirmable `hasMeta`/slot contract). Second: plain styled divs, which
-  worked but wasn't the real thing. Now it's a real `ha-data-table`: sortable
-  "Name" column (with url_path as secondary text), a built-in search box
-  (appears automatically once a column is `filterable` — no custom search
-  code needed), clickable rows (opens edit mode), and a per-row overflow
-  ("⋮") menu for Rename/Edit/Delete, matching the native page's own row
-  actions. This is also why the project now has a build step — see
+- The Popup Manager panel's list went through a few revisions before landing
+  here: `ha-list`/`ha-list-item` (row actions never rendered), then plain
+  styled divs (worked, but not the real thing), then a real `ha-data-table`
+  with an overflow ("⋮") menu (matching the native page exactly) — but three
+  actions behind a menu was more clicks than wanted, so the menu's gone: all
+  three (Rename/Edit/Delete) now render as plain icon buttons directly on
+  each row. Still a real `ha-data-table` for everything else: sortable
+  "Name" column (url_path as secondary text, click-to-copy), a built-in
+  search box (appears automatically once a column is `filterable` — no
+  custom search code needed), full width, and clickable rows (opens edit
+  mode). This table is also why the project now has a build step — see
   "Development" above.
+- **Per-popup dialog width**: the create/rename dialog now has a second,
+  optional field — free text (not a size dropdown), so either a px or %
+  value works (e.g. `800px`, `70%`). Saved into the popup's own dashboard
+  config, no new metadata store needed. Applies only on desktop — narrow/
+  mobile screens always get the full-width dialog regardless of this
+  setting (the field's helper text says so). Leave it blank for the
+  existing default (`min(90vw, 1024px)`).
 - "+ New popup" moved out of the toolbar to a fixed bottom-right button,
   matching where Settings > Dashboards puts its "Add dashboard" action (a
   FAB in the native page). HA itself removed the dedicated `ha-fab` component
@@ -195,11 +203,11 @@ just HA storage dashboards, untouched by any of this.
     pick "Fire an event", set Event Type to `nativepop_open_popup` and Event
     Data to `popup: popup-test`, then perform the action — the popup should
     open with no card or tap involved.
-12. **Popup Manager panel** (now a real `ha-data-table`, same as Settings >
-    Dashboards):
+12. **Popup Manager panel** (now a real `ha-data-table`, full width, same as
+    Settings > Dashboards):
     - Existing popups should show up as rows: leading icon, title with
-      `#url_path` underneath as secondary text, and a "⋮" overflow menu on
-      the right.
+      `#url_path` underneath as secondary text, and three icon buttons
+      (Rename/Edit/Delete) directly on the row — no overflow menu.
     - A **search box** should appear above the list automatically (no setup
       needed) — type part of a popup's name or url_path and confirm it
       filters the rows live.
@@ -212,19 +220,27 @@ just HA storage dashboards, untouched by any of this.
       the execCommand fallback rather than the Clipboard API — worth actually
       pasting it somewhere to confirm it copied, not just that the toast
       showed.
-    - Clicking anywhere else on a row should open that dashboard in edit mode.
-    - The "⋮" menu should offer Rename / Edit / Delete. Edit matches the row
-      click. Rename opens the same style of dialog as create, pre-filled with
-      the current name (url_path/hash stays the same after — check an
-      existing trigger still works). Delete asks for confirmation, then
-      removes it and refreshes the list.
+    - Clicking anywhere else on a row should open that dashboard in edit
+      mode — check clicking one of the three action icons does *not* also
+      trigger this (stopPropagation should keep them independent).
+    - Pencil icon opens edit mode (same as row click). Rename icon opens the
+      same style of dialog as create, pre-filled with the current name
+      (url_path/hash stays the same after — check an existing trigger still
+      works). Delete icon asks for confirmation, then removes it and
+      refreshes the list.
     - "+ New popup" (bottom-right) should render as a filled, pill-shaped
       button in your theme's accent color, matching Settings > Dashboards'
       "Add dashboard" button. Same create dialog as before.
     - On a narrow window (or the companion app), check the hamburger icon in
-      the panel's toolbar actually opens the sidebar, and that the overflow
-      menu still works (its layout is supposed to adapt on narrow screens).
+      the panel's toolbar actually opens the sidebar, and that all three row
+      icons stay usable (not clipped/overlapping) at narrow widths.
 13. **Dialog polish** — open any popup and confirm: it opens noticeably
     wider than before; briefly shows a spinner before content appears (may be
     too fast to see on a fast connection/LAN, that's fine); and clicking
     outside the dialog (on the dimmed background) closes it.
+14. **Per-popup dialog width** — open a popup's Rename dialog, set width to
+    e.g. `500px`, save, then re-open the popup on desktop: it should be
+    noticeably narrower than the default. Try `70%` too. Then check on a
+    narrow window (or the companion app/phone) — it should be full width
+    regardless of the saved value. Clear the field back to blank and confirm
+    it returns to the normal default width.

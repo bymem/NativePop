@@ -86,6 +86,20 @@
 // the reason this project now has a build step (esbuild, see package.json) -
 // everything else in this file is still plain, dependency-free JS; `lit-html`
 // is used *only* for the handful of `column.template` callbacks below.
+//
+// Two follow-up rounds after the table landed: the overflow menu got
+// replaced with three plain ha-icon-buttons directly on the row (all three
+// actions visible, not tucked behind a "⋮"), and the list was widened to
+// fill the panel instead of being capped at max-width: 900px.
+//
+// Also new: a per-popup dialog width override. Free-text (not a size
+// preset), so either a px or % value works, saved into the popup's own
+// dashboard view config (a `nativepop_dialog_width` field alongside
+// `type: sections`) rather than a new metadata store. Applied in
+// openNativePopDialog - but only when isNarrow() is false. On narrow/mobile
+// viewports the override is deliberately left unset, so ha-dialog's own
+// (already viewport-safe) default takes over - mobile always gets full
+// width, regardless of what a popup's desktop width is set to.
 import { html } from "lit-html";
 
 const POPUP_URL_PATH_PREFIX = "popup-";
@@ -119,6 +133,27 @@ let weSetHashOurselves = false;
 function getHass() {
   const haEl = document.querySelector("home-assistant");
   return haEl ? haEl.hass : undefined;
+}
+
+// Same root element, same trick: HA computes "narrow" (mobile/small-viewport)
+// once at the app root and passes it down to every panel (panel_custom's
+// own `.narrow` setter - see NativePopPanel below - gets it this same way).
+// Reading it here too means the popup dialog's width override can defer to
+// HA's own narrow/mobile detection instead of us guessing a breakpoint.
+function isNarrow() {
+  const haEl = document.querySelector("home-assistant");
+  return !!(haEl && haEl.narrow);
+}
+
+// A user-entered dialog width (free text: "800px", "70%", etc.) is only
+// ever trusted if it parses as a plain CSS length/percentage - anything
+// else (empty, garbage) means "use the default," not "break the dialog."
+function sanitizeDialogWidth(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return /^\d+(\.\d+)?(px|%|vw|rem|em)$/.test(trimmed) ? trimmed : null;
 }
 
 // After a programmatic history.pushState(), HA's own router needs this event
@@ -189,8 +224,16 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   dialog.open = true;
   // mwc-dialog's default width is cramped for a full dashboard view; widen
   // it via the custom property ha-dialog actually reads for its default
-  // ("medium") width tier (see src/components/ha-dialog.ts).
-  dialog.style.setProperty("--ha-dialog-width-md", "min(90vw, 1024px)");
+  // ("medium") width tier (see src/components/ha-dialog.ts). A per-popup
+  // custom width (from the create/rename dialog) can override this default
+  // once the config fetch below resolves - but only on desktop. On narrow
+  // viewports we deliberately leave this custom property untouched, so
+  // ha-dialog's own default (already viewport-safe) behavior applies -
+  // mobile should always be full width, not whatever a desktop-oriented
+  // custom size happens to be.
+  if (!isNarrow()) {
+    dialog.style.setProperty("--ha-dialog-width-md", "min(90vw, 1024px)");
+  }
 
   const content = document.createElement("div");
   content.className = "nativepop-loading";
@@ -255,6 +298,15 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
     // Closed again before the fetch resolved (e.g. tapped open then
     // immediately closed) - nothing left to mount into.
     return;
+  }
+
+  if (!isNarrow()) {
+    const customWidth = sanitizeDialogWidth(
+      lovelaceConfig.views && lovelaceConfig.views[0] && lovelaceConfig.views[0].nativepop_dialog_width
+    );
+    if (customWidth) {
+      dialog.style.setProperty("--ha-dialog-width-md", customWidth);
+    }
   }
 
   // Minimal but structurally correct `Lovelace` object — matches the shape
@@ -383,15 +435,44 @@ function slugify(text) {
     .replace(/^-+|-+$/g, "");
 }
 
-// Real dialog for entering a popup's name (create/rename), matching HA's own
-// dashboard create/edit dialog (dialog-lovelace-dashboard-detail.ts) instead
-// of a browser prompt(): ha-dialog + ha-form (schema-driven, so it renders
-// through the same field components any native settings form uses) +
-// ha-dialog-footer with primary/secondary ha-button actions. Resolves to the
-// trimmed title string, or null if cancelled.
-function showNativePopFormDialog(hass, { heading, initialTitle = "", confirmLabel }) {
+// Schema shared by create and rename: name (required) + an optional
+// free-text dialog width override. Free text rather than a preset dropdown
+// (Mikkel's call) so either a px or % value works - sanitizeDialogWidth()
+// is what actually validates it, both here (defense in depth, not a hard
+// gate on the form) and again wherever the value is applied.
+const POPUP_FORM_SCHEMA = [
+  { name: "title", required: true, selector: { text: {} } },
+  { name: "width", required: false, selector: { text: {} } },
+];
+
+function computePopupFormLabel(schema) {
+  if (schema.name === "title") {
+    return "Name";
+  }
+  if (schema.name === "width") {
+    return "Dialog width (desktop only)";
+  }
+  return schema.name;
+}
+
+function computePopupFormHelper(schema) {
+  if (schema.name === "width") {
+    return 'e.g. "800px" or "70%" - leave blank for the default. Narrow/mobile screens always open full width, regardless of this setting.';
+  }
+  return "";
+}
+
+// Real dialog for entering a popup's name + dialog width (create/rename),
+// matching HA's own dashboard create/edit dialog
+// (dialog-lovelace-dashboard-detail.ts) instead of a browser prompt():
+// ha-dialog + ha-form (schema-driven, so it renders through the same field
+// components any native settings form uses) + ha-dialog-footer with
+// primary/secondary ha-button actions. Resolves to {title, width} (width
+// raw/untrimmed - sanitizeDialogWidth() at the call site decides if it's
+// usable), or null if cancelled.
+function showNativePopFormDialog(hass, { heading, data, confirmLabel }) {
   return new Promise((resolve) => {
-    let currentTitle = initialTitle;
+    let currentData = { ...data };
     let resolved = false;
 
     const dialog = document.createElement("ha-dialog");
@@ -400,9 +481,10 @@ function showNativePopFormDialog(hass, { heading, initialTitle = "", confirmLabe
 
     const form = document.createElement("ha-form");
     form.hass = hass;
-    form.schema = [{ name: "title", required: true, selector: { text: {} } }];
-    form.data = { title: currentTitle };
-    form.computeLabel = (schema) => (schema.name === "title" ? "Name" : schema.name);
+    form.schema = POPUP_FORM_SCHEMA;
+    form.data = currentData;
+    form.computeLabel = computePopupFormLabel;
+    form.computeHelper = computePopupFormHelper;
 
     const cancelBtn = document.createElement("ha-button");
     cancelBtn.slot = "secondaryAction";
@@ -417,17 +499,17 @@ function showNativePopFormDialog(hass, { heading, initialTitle = "", confirmLabe
     const primaryBtn = document.createElement("ha-button");
     primaryBtn.slot = "primaryAction";
     primaryBtn.textContent = confirmLabel;
-    primaryBtn.disabled = !currentTitle.trim();
+    primaryBtn.disabled = !currentData.title.trim();
     primaryBtn.addEventListener("click", () => {
       resolved = true;
       dialog.open = false;
-      resolve(currentTitle.trim());
+      resolve(currentData);
     });
 
     form.addEventListener("value-changed", (ev) => {
-      currentTitle = ev.detail.value.title || "";
-      form.data = ev.detail.value;
-      primaryBtn.disabled = !currentTitle.trim();
+      currentData = ev.detail.value;
+      form.data = currentData;
+      primaryBtn.disabled = !(currentData.title || "").trim();
     });
 
     const footer = document.createElement("ha-dialog-footer");
@@ -457,8 +539,10 @@ function showNativePopFormDialog(hass, { heading, initialTitle = "", confirmLabe
 // The list is a real <ha-data-table> (see file header for why this needed a
 // build step) - the same component Settings > Dashboards uses
 // (ha-config-lovelace-dashboards.ts), which gets us sortable columns,
-// clickable rows, an overflow menu per row, AND a built-in search box for
-// free (search box appears automatically once any column is `filterable`).
+// clickable rows, AND a built-in search box for free (search box appears
+// automatically once any column is `filterable`). Row actions are three
+// plain ha-icon-buttons rather than the native page's overflow menu -
+// Mikkel wants all three visible on the row at once, not tucked behind a "⋮".
 //
 // The "+ New popup" button is a plain positioned <ha-button size="l">, not a
 // real FAB - HA itself removed the ha-fab component as of 2026.5 ("we use
@@ -533,31 +617,41 @@ class NativePopPanel extends HTMLElement {
       },
       actions: {
         title: "",
-        type: "overflow-menu",
+        minWidth: "144px",
+        maxWidth: "144px",
         showNarrow: true,
+        // Three plain ha-icon-buttons instead of an overflow menu - Mikkel
+        // wants all three actions visible on the row, not collapsed behind
+        // a "⋮". Using .path= directly (real SVG data, see ICON_PATHS) now
+        // that real Lit templates are available, rather than the
+        // slotted-<ha-icon> fallback used before the build step existed.
         template: (popup) => html`
-          <ha-icon-overflow-menu
-            .hass=${this._hass}
-            narrow
-            .items=${[
-              {
-                path: ICON_PATHS.renameBox,
-                label: "Rename",
-                action: () => this._renamePopup(popup),
-              },
-              {
-                path: ICON_PATHS.pencil,
-                label: "Edit",
-                action: () => this._editPopup(popup),
-              },
-              {
-                path: ICON_PATHS.deleteOutline,
-                label: "Delete",
-                action: () => this._deletePopup(popup),
-                warning: true,
-              },
-            ]}
-          ></ha-icon-overflow-menu>
+          <div style="display: flex;">
+            <ha-icon-button
+              .path=${ICON_PATHS.renameBox}
+              label="Rename"
+              @click=${(ev) => {
+                ev.stopPropagation();
+                this._renamePopup(popup);
+              }}
+            ></ha-icon-button>
+            <ha-icon-button
+              .path=${ICON_PATHS.pencil}
+              label="Edit"
+              @click=${(ev) => {
+                ev.stopPropagation();
+                this._editPopup(popup);
+              }}
+            ></ha-icon-button>
+            <ha-icon-button
+              .path=${ICON_PATHS.deleteOutline}
+              label="Delete"
+              @click=${(ev) => {
+                ev.stopPropagation();
+                this._deletePopup(popup);
+              }}
+            ></ha-icon-button>
+          </div>
         `,
       },
     };
@@ -576,7 +670,7 @@ class NativePopPanel extends HTMLElement {
           position: sticky; top: 0; z-index: 1;
         }
         .toolbar .title { font-size: 20px; font-weight: 400; flex: 1; }
-        .content { padding-bottom: 88px; max-width: 900px; margin: 0 auto; }
+        .content { padding-bottom: 88px; }
         .fab-button {
           position: fixed; bottom: 16px; right: 16px; z-index: 2;
         }
@@ -693,38 +787,90 @@ class NativePopPanel extends HTMLElement {
   }
 
   async _renamePopup(popup) {
-    const newTitle = await showNativePopFormDialog(this._hass, {
-      heading: "Rename popup",
-      initialTitle: popup.title,
-      confirmLabel: "Rename",
-    });
-    if (!newTitle || newTitle === popup.title) {
-      return;
-    }
+    // Fetched once up front: pre-fills the current width in the dialog, and
+    // (if the width changes) gets reused to save it back, so this is a
+    // single lovelace/config round trip either way instead of two.
+    let config;
     try {
-      // Title only — url_path stays fixed, since triggers (hash,
-      // fire-dom-event, automations) are wired to it (see file header).
-      await this._hass.callWS({
-        type: "lovelace/dashboards/update",
-        dashboard_id: popup.id,
-        title: newTitle,
-      });
+      config = await this._hass.callWS({ type: "lovelace/config", url_path: popup.url_path });
     } catch (err) {
-      console.error("NativePop: could not rename popup dashboard", err);
-      alert("NativePop: could not rename popup. See console for details.");
+      console.error("NativePop: could not load popup config for rename", err);
+      alert("NativePop: could not load popup. See console for details.");
       return;
     }
+    const currentWidth = (config.views && config.views[0] && config.views[0].nativepop_dialog_width) || "";
+
+    const result = await showNativePopFormDialog(this._hass, {
+      heading: "Rename popup",
+      data: { title: popup.title, width: currentWidth },
+      confirmLabel: "Save",
+    });
+    if (!result) {
+      return;
+    }
+
+    const newTitle = (result.title || "").trim();
+    const newWidth = sanitizeDialogWidth(result.width) || "";
+    const titleChanged = newTitle && newTitle !== popup.title;
+    const widthChanged = newWidth !== currentWidth;
+    if (!titleChanged && !widthChanged) {
+      return;
+    }
+
+    if (titleChanged) {
+      try {
+        // Title only — url_path stays fixed, since triggers (hash,
+        // fire-dom-event, automations) are wired to it (see file header).
+        await this._hass.callWS({
+          type: "lovelace/dashboards/update",
+          dashboard_id: popup.id,
+          title: newTitle,
+        });
+      } catch (err) {
+        console.error("NativePop: could not rename popup dashboard", err);
+        alert("NativePop: could not rename popup. See console for details.");
+        return;
+      }
+    }
+
+    if (widthChanged) {
+      const views = config.views ? [...config.views] : [{ type: "sections", sections: [] }];
+      const view = { ...views[0] };
+      if (newWidth) {
+        view.nativepop_dialog_width = newWidth;
+      } else {
+        delete view.nativepop_dialog_width;
+      }
+      views[0] = view;
+      try {
+        await this._hass.callWS({
+          type: "lovelace/config/save",
+          url_path: popup.url_path,
+          config: { ...config, views },
+        });
+      } catch (err) {
+        console.error("NativePop: could not save popup dialog width", err);
+        alert("NativePop: could not save the dialog width. See console for details.");
+      }
+    }
+
     await this._refresh();
   }
 
   async _createPopup() {
-    const title = await showNativePopFormDialog(this._hass, {
+    const result = await showNativePopFormDialog(this._hass, {
       heading: "Create popup",
+      data: { title: "", width: "" },
       confirmLabel: "Create",
     });
+    if (!result) {
+      return;
+    }
+    const title = (result.title || "").trim();
     if (!title) {
       return;
     }
+    const width = sanitizeDialogWidth(result.width);
     const slug = slugify(title);
     if (!slug) {
       alert("NativePop: please use a name with at least one letter or number.");
@@ -764,11 +910,15 @@ class NativePopPanel extends HTMLElement {
     // Dashboard creation doesn't let you set the view type - default it to a
     // single "sections" view per spec 5.1. Non-fatal if this fails; the
     // dashboard still exists, just with whatever HA's own fallback view is.
+    const viewConfig = { title, type: "sections", sections: [] };
+    if (width) {
+      viewConfig.nativepop_dialog_width = width;
+    }
     try {
       await this._hass.callWS({
         type: "lovelace/config/save",
         url_path: urlPath,
-        config: { views: [{ title, type: "sections", sections: [] }] },
+        config: { views: [viewConfig] },
       });
     } catch (err) {
       console.warn("NativePop: created popup but could not set its default view to sections", err);

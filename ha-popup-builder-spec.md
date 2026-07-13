@@ -79,13 +79,15 @@ companion integration's Python (see 5.7) — not a manual `configuration.yaml`
 entry — providing:
 
 - List of all popup dashboards (filtered by URL path prefix or a config registry —
-  see 5.5), rendered as a real `ha-data-table` *(done, milestone 5)* — the same
-  component Settings > Dashboards uses (`ha-config-lovelace-dashboards.ts`), not an
-  approximation. Gets sortable columns, clickable rows (opens edit mode), a
-  built-in search box (automatic once a column is `filterable` — no custom search
-  code needed, satisfying the "add search" ask directly), and a per-row overflow
-  menu (Rename/Edit/Delete) for free. This is what forced the build-step reversal
-  in 5.8.
+  see 5.5), rendered as a real `ha-data-table`, full width *(done, milestone 5)* —
+  the same component Settings > Dashboards uses (`ha-config-lovelace-dashboards.ts`),
+  not an approximation. Gets sortable columns, clickable rows (opens edit mode), and
+  a built-in search box (automatic once a column is `filterable` — no custom search
+  code needed, satisfying the "add search" ask directly) for free. This is what
+  forced the build-step reversal in 5.8. Row actions (Rename/Edit/Delete) render as
+  three plain `ha-icon-button`s directly on the row, not the native page's overflow
+  ("⋮") menu — tried that first since it's what the reference file uses, but three
+  actions behind one menu was judged more clicks than wanted for a list this size.
 - Create new popup (prompts for name → creates hidden dashboard, opens it in edit mode).
 - Rename / delete popup. Rename changes the `title` only (via `lovelace/dashboards/update`)
   — the `url_path`/slug stays fixed, since triggers (hash, fire-dom-event, automations)
@@ -96,6 +98,12 @@ entry — providing:
   secure context, e.g. plain-HTTP local instances). Copying a ready-to-paste example
   trigger YAML snippet (not just the bare slug) is still a nice-to-have, not built.
 - Optional: quick preview (render the popup's view read-only in a dialog).
+- Per-popup dialog width *(done, milestone 5)* — a free-text field (not a size preset)
+  in the create/rename dialog, so either a px or % value works. Saved as a
+  `nativepop_dialog_width` field on the popup's own dashboard view config (piggybacks
+  on the same object `type: sections` already lives on — no new metadata store).
+  Desktop only by design (see 5.3); narrow/mobile always gets the full-width dialog
+  regardless, and the field's helper text says so.
 
 This panel is mostly CRUD UI wrapping existing dashboard WS commands. No rendering
 internals needed here.
@@ -114,6 +122,16 @@ A small custom element/module that:
 
 This is the one component touching an **undocumented internal** (`hui-view`). Scope
 should be kept minimal — a thin mount/unmount wrapper, not a fork.
+
+**Dialog width** *(done, milestone 5)*: defaults to `min(90vw, 1024px)` via the
+`--ha-dialog-width-md` custom property (the tier `ha-dialog` reads by default —
+see `src/components/ha-dialog.ts`), overridable per popup (5.2). The override is
+applied only when `isNarrow()` (HA's own already-computed narrow/mobile flag, read
+straight off the `<home-assistant>` root element — same escape hatch as `hass`
+itself, see 7) is false. On narrow viewports the custom property is left untouched
+entirely, so `ha-dialog`'s own default (already viewport-safe) behavior governs —
+deliberately not reimplemented ourselves, to avoid the risk of guessing HA's
+internal breakpoint wrong.
 
 ### 5.4 Trigger paths (both call into 5.3)
 
@@ -353,12 +371,19 @@ menu rather than hand-rolled equivalents.
      pointing back to. Replaced with an actual `ha-data-table` (see 5.2,
      5.8) — which also directly delivered the requested search feature, and
      forced the project's build-step reversal since the table's icon/action
-     columns need real Lit templates.
+     columns need real Lit templates. First pass used the native page's
+     overflow ("⋮") menu for row actions too; feedback was that three
+     actions behind one menu wasn't wanted here, so it's three plain
+     `ha-icon-button`s on the row instead — the one place this panel
+     deliberately doesn't mirror the reference file's exact layout.
+   - Per-popup dialog width (5.2/5.3): a free-text override, not the size-preset
+     dropdown originally floated in milestone 6's backlog — Mikkel wanted the
+     flexibility of an arbitrary px/% value over a fixed set of options.
 
    Mobile-specific behavior (companion app testing) still outstanding — no
    way to verify without a physical device.
 6. **(Optional v2)**: metadata registry/backend helper if naming convention proves
-   limiting; preview mode in sidebar panel; per-popup dialog size presets.
+   limiting; preview mode in sidebar panel.
 
 ## 9. Open questions for implementation
 
