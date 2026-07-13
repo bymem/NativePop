@@ -74,7 +74,9 @@ difference is what initiates it (a DOM event vs. a `hashchange`/history listener
 
 ### 5.2 Sidebar panel ("Popup Manager")
 
-A custom panel (`panel_custom` or a registered HA panel) providing:
+A custom panel, registered via `panel_custom.async_register_panel()` from the
+companion integration's Python (see 5.7) — not a manual `configuration.yaml`
+entry — providing:
 
 - List of all popup dashboards (filtered by URL path prefix or a config registry —
   see 5.5).
@@ -138,8 +140,11 @@ alert), with no card/tap involved at all:
   (standard `home-assistant-js-websocket` API) and opens the dialog via 5.3, same as a
   direct trigger (no URL change).
 - This broadcasts to every connected frontend session, same as any other HA event —
-  there's no per-browser/per-user targeting in v1 (that would need a backend
-  component, which section 5.6 already avoids for v1).
+  there's no per-browser/per-user targeting in v1. We do have a companion integration
+  now (5.7), so this is no longer a hard architectural blocker like it was when 5.6 was
+  first written — but per-target delivery would need the integration to track
+  registered browsers/sessions (à la `browser_mod`), which is real additional work, not
+  a side effect of already having a backend. Deferred to v2 (milestone 6).
 
 ### 5.6 Registry / metadata
 
@@ -147,14 +152,48 @@ Need a lightweight way to track "which dashboards are popups" beyond just URL pr
 matching, to support renaming, filtering the sidebar list cleanly, and future metadata
 (e.g. default dialog size, close behavior). Options to evaluate:
 
-- Store metadata as a JSON blob in a dedicated `.storage` file via a small backend
-  helper (if a companion integration/add-on is in scope), **or**
-- Piggyback on dashboard `title`/`url_path` naming convention only, avoiding any
-  custom backend (simpler, v1-friendly, but less flexible).
+- Store metadata as a JSON blob via the companion integration's own storage (see 5.7 —
+  cheaper now than when this was first written, since the integration already exists),
+  **or**
+- Piggyback on dashboard `title`/`url_path` naming convention only (simpler, what v1
+  actually uses).
 
-**Decision needed before implementation starts** — recommend starting with the
-naming-convention-only approach (no backend component) and only introducing a
-storage helper if metadata needs grow.
+**Decision (still holds through milestone 4)** — naming-convention-only, no metadata
+storage yet. Revisit only if/when metadata needs grow (e.g. milestone 5 rename support
+turns out to need more than a WS `update` call).
+
+### 5.7 Delivery model: companion integration
+
+Originally scoped as a frontend-only HACS "plugin" (Lovelace resource + manual
+`panel_custom` YAML for the sidebar panel — see the old wording in 5.2/5.4/5.6 history).
+Revised at milestone 4 after finding a working, already-proven pattern in a sibling
+project ([ha-meal-planer](https://github.com/bymem/ha-meal-planer)) for delivering
+exactly this kind of frontend-only functionality with better ergonomics:
+
+- **`custom_components/nativepop/`** — a minimal HA integration. `manifest.json` +
+  `config_flow.py` implement a single-step, config-free setup ("Add Integration" →
+  confirm, done — no fields, single-instance).
+- **`async_setup()`** (runs once per HA process) registers a static path serving
+  `custom_components/nativepop/www/nativepop.js` (`hass.http.async_register_static_paths`),
+  and auto-loads that same module on every frontend page via
+  `homeassistant.components.frontend.add_extra_js_url()` — this is what the trigger
+  listeners (5.4/5.5) need to always be live, and resolves the open question about
+  where a "global" hash listener can reliably live (see 9).
+- **`async_setup_entry()`** (runs when the config entry is added) registers the
+  "Popup Manager" sidebar panel via `panel_custom.async_register_panel()` — no manual
+  YAML.
+- HACS category is **`integration`**, not `plugin`/dashboard — this matters because
+  HACS's `integration` category only copies `custom_components/` into the HA config
+  dir; it does not manage a `www/community/` folder or `/hacsfiles/` URLs the way the
+  `plugin` category does. The JS is served entirely by the integration's own static
+  path instead.
+- None of the actual trigger/dialog-mount logic changed — this is purely a delivery
+  upgrade (packaging + registration), not a rewrite of 5.3/5.4/5.5.
+- Trade-off accepted: this does add a small Python backend, which the original 5.6
+  decision explicitly avoided for v1. Judged worth it because (a) the pattern was
+  already proven working in a sibling project, so it wasn't new/unknown risk, and
+  (b) it removes both a manual YAML step and an unverified assumption about
+  Lovelace-resource load timing.
 
 ## 6. Data flow
 
@@ -204,7 +243,8 @@ storage helper if metadata needs grow.
 | Hidden dashboards showing up unexpectedly (search, quick-bar, voice) | `show_in_sidebar: false` hides nav but may not hide from all HA surfaces | Verify behavior across HA search/quick-bar; document known limitations |
 | Storage dashboard count at scale | Many popups = many dashboards in `.storage/lovelace.*` | Acceptable for personal use scale; not a concern at Mikkel's scope |
 | Companion app (iOS) parity | Custom elements/dialogs, and hash-based navigation, sometimes behave differently in the app's webview | Test explicitly on iOS companion app, not just desktop browser |
-| Automation-triggered popups have no targeting | `nativepop_open_popup` events broadcast to every connected frontend session, not a specific browser/user | Document as a known v1 limitation; per-target delivery would need a backend component (out of scope, see 5.6) |
+| Automation-triggered popups have no targeting | `nativepop_open_popup` events broadcast to every connected frontend session, not a specific browser/user | Document as a known v1 limitation; per-target delivery needs the integration to track registered browsers/sessions (à la `browser_mod`) — real work, deferred to v2 (see 5.5, 8) |
+| Companion integration adds a small Python backend | Contradicts the original 5.6 decision to avoid a backend for v1 | Accepted trade-off at milestone 4 (see 5.7) — the pattern was already proven in a sibling project, and it removes a manual YAML step plus an unverified resource-load-timing assumption |
 
 ## 8. Milestones
 
@@ -219,9 +259,11 @@ storage helper if metadata needs grow.
    automation "Fire an event" trigger (see 5.5), not originally scoped but a natural
    extension of "generalize trigger paths."
 4. **Sidebar panel v1** *(done)*: list/create/delete popups (naming-convention
-   based, no backend), create opens native dashboard editor directly
-   (`?edit=1`). Registered via `panel_custom` (one manual configuration.yaml
-   entry — no way around this without a backend component). Rename deferred
+   based, no metadata registry), create opens native dashboard editor directly
+   (`?edit=1`). Also includes an unscoped delivery pivot (see 5.7): converted
+   from a frontend-only HACS plugin to a companion integration
+   (`custom_components/nativepop/`), self-registering the panel and
+   auto-loading the trigger listeners with no manual YAML. Rename deferred
    to milestone 5, as originally scoped.
 5. **Polish**: rename support, dialog sizing/mobile behavior, close-on-outside-click,
    loading state while config fetches.
@@ -241,11 +283,10 @@ storage helper if metadata needs grow.
   has no view-type field of its own). No creation-time override in v1.
 - ~~Where does the global hash listener live so it's always loaded (a small always-on
   Lovelace resource vs. bundled into the sidebar panel's module)?~~ **Resolved (milestone
-  4)**: same single file for both — the sidebar panel's `panel_custom.module_url` points
-  at the identical `NativePop.js` already registered as a Lovelace resource (ES modules
-  are cached/evaluated once per URL, so no duplicate listeners). Still relies on the
-  Lovelace resource being loaded before the trigger listeners are live, which holds for
-  normal dashboard usage but not yet verified for every HA surface (e.g. a cold load
-  landing directly on `/config` or another non-Lovelace panel first).
+  4, superseding an earlier same-milestone answer)**: neither — the companion
+  integration's `add_extra_js_url()` (see 5.7) auto-loads the module on every frontend
+  page load, not scoped to Lovelace dashboards at all. This is a stronger guarantee than
+  "loaded as a Lovelace resource" ever was, and was the deciding factor in adopting the
+  integration-based delivery model.
 - Minimum supported HA core version (affects whether `hui-view` mount patterns from
   older reverse-engineering write-ups still apply).

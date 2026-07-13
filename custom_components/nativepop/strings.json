@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up NativePop",
+        "description": "NativePop needs no configuration — just confirm to add it. You'll get the \"Popup Manager\" sidebar panel, plus the trigger listeners (navigate/hash, tap, and automation) loaded on every page."
+      }
+    },
+    "abort": {
+      "already_configured": "NativePop is already set up."
+    }
+  }
+}

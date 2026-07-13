@@ -1,0 +1,13 @@
+{
+  "domain": "nativepop",
+  "name": "NativePop",
+  "version": "1.0.0",
+  "config_flow": true,
+  "documentation": "https://github.com/bymem/NativePop",
+  "issue_tracker": "https://github.com/bymem/NativePop/issues",
+  "dependencies": ["http", "frontend"],
+  "codeowners": ["@bymem"],
+  "requirements": [],
+  "iot_class": "local_push",
+  "hacs": "1.0.0"
+}

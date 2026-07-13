@@ -1,4 +1,4 @@
-// NativePop — Milestones 1-3 proof of concept
+// NativePop — Milestones 1-4 proof of concept
 //
 // Milestone 1: hardcoded direct-trigger card that fetches one manually-created
 // hidden dashboard's config and mounts it via HA's internal `hui-view` inside
@@ -48,15 +48,20 @@
 //
 // We subscribe to that event type over the same websocket connection `hass`
 // already uses. This broadcasts to every connected frontend session (same
-// as any other HA event) — there's no per-browser/per-user targeting in v1;
-// that would need the kind of backend component the spec avoids for now.
+// as any other HA event) — there's no per-browser/per-user targeting in v1.
 //
-// Milestone 4: sidebar panel ("Popup Manager"), registered via HA's built-in
-// `panel_custom` integration (a configuration.yaml entry is required — see
-// README, since a frontend resource can't register a sidebar panel purely on
-// its own). List/create/delete only in v1, naming-convention based (any
-// dashboard whose url_path starts with "popup-" counts, per spec 5.6 — no
-// backend/metadata registry). Rename is milestone 5.
+// Milestone 4: sidebar panel ("Popup Manager"), plus a delivery pivot — this
+// file is now served by the NativePop *integration*
+// (custom_components/nativepop/), not a HACS "plugin"/Lovelace-resource
+// install. The integration's frontend.py auto-loads this module on every
+// frontend page via `add_extra_js_url()` (so the trigger listeners are
+// always live, no manual "add resource" step) and registers the sidebar
+// panel via `panel_custom.async_register_panel()` (so no manual
+// configuration.yaml entry either) — both self-register the moment the
+// integration's (config-free) config flow is confirmed. List/create/delete
+// only in v1, naming-convention based (any dashboard whose url_path starts
+// with "popup-" counts, per spec 5.6 — no backend/metadata registry).
+// Rename is milestone 5.
 
 const POPUP_URL_PATH_PREFIX = "popup-";
 const POPUP_HASH_PREFIX = `#${POPUP_URL_PATH_PREFIX}`;
@@ -290,9 +295,9 @@ function slugify(text) {
 }
 
 // Sidebar panel: list / create / delete popups. Registered as
-// <nativepop-panel> via panel_custom (README has the configuration.yaml
-// snippet). HA sets `.hass` (repeatedly, on every state change) and `.panel`
-// (the panel_custom config) on this element.
+// <nativepop-panel> by the integration's frontend.py (no manual YAML). HA
+// sets `.hass` (repeatedly, on every state change) and `.panel` (the
+// panel_custom config) on this element.
 class NativePopPanel extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
@@ -530,4 +535,4 @@ window.customCards.push({
   description: "Milestone 1-3 proof of concept trigger for NativePop popups.",
 });
 
-console.info("NativePop: milestone 4 loaded (PoC card + Popup Manager panel)");
+console.info("NativePop: milestone 4 loaded (integration-based delivery, PoC card + Popup Manager panel)");

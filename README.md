@@ -6,7 +6,7 @@ editor, trigger via tap or navigation, reusable across dashboards.
 See [ha-popup-builder-spec.md](ha-popup-builder-spec.md) for the full technical
 spec and milestone plan.
 
-## Status: Milestone 4 (sidebar panel)
+## Status: Milestone 4 (sidebar panel + integration-based delivery)
 
 All trigger paths are slug-driven and usable without any NativePop-specific
 wrapper card:
@@ -16,17 +16,16 @@ wrapper card:
   `navigation_path: "#popup-<slug>"` (fully visual-editor friendly, works
   from tile cards, navbar cards, etc.), a plain link, the browser back
   button, or a cold-load deep link. Also handles real `tap_action: navigate`
-  correctly now, which internally uses `history.pushState()` and doesn't
-  fire `hashchange`/`popstate` on its own — HA fires its own
-  `location-changed` event for this, which we now listen for too.
+  correctly, which internally uses `history.pushState()` and doesn't fire
+  `hashchange`/`popstate` on its own — HA fires its own `location-changed`
+  event for this, which we listen for too.
 - **Direct trigger (fallback)**: any card's tap_action can open a popup with
   `action: fire-dom-event` and a `nativepop_popup: popup-<slug>` key. Works,
   but HA removed `fire-dom-event` from the visual action picker a while back
   (YAML-only), so `navigate` is the recommended tap trigger in practice —
   this is kept as a working fallback, not the primary path.
-- **Automation trigger (new, no tap involved)**: any automation can open a
-  popup with HA's built-in, visually-editable "Fire an event" action — no
-  backend integration needed:
+- **Automation trigger (no tap involved)**: any automation can open a popup
+  with HA's built-in, visually-editable "Fire an event" action:
   ```yaml
   actions:
     - event: nativepop_open_popup
@@ -40,49 +39,72 @@ The `nativepop-poc-card` from earlier milestones still works (now with a
 configurable `popup:` key) as a quick test harness, but it's no longer the
 recommended way to trigger a popup — see the native-card tests below.
 
-**New this milestone**: a "Popup Manager" sidebar panel (`nativepop-panel`)
-to list, create, and delete popups — no more manually creating dashboards
-through Settings. Naming-convention based (any dashboard with a `popup-*`
-url_path counts), no backend component. Create prompts for a name, derives
-the url_path by slugifying it, creates the hidden dashboard, and opens it
-straight into edit mode (`?edit=1`). Rename isn't in v1 yet (milestone 5).
+**Sidebar panel** ("Popup Manager", `nativepop-panel`) lists, creates, and
+deletes popups — no more manually creating dashboards through Settings.
+Naming-convention based (any dashboard with a `popup-*` url_path counts, no
+metadata storage yet). Create prompts for a name, derives the url_path by
+slugifying it, creates the hidden dashboard, defaults its view to
+`type: sections`, and opens it straight into edit mode (`?edit=1`). Rename
+isn't in v1 yet (milestone 5).
 
-Unlike the trigger mechanisms, the panel itself needs one manual
-**configuration.yaml** entry — there's no way for a frontend-only resource to
-register a sidebar panel purely on its own; `panel_custom` is HA's built-in,
-official mechanism for this and needs no custom backend component:
+**Delivery model changed this milestone.** NativePop is no longer a
+frontend-only HACS "plugin" — it's now a small companion integration
+(`custom_components/nativepop/`), following the same pattern as
+[ha-meal-planer](https://github.com/bymem/ha-meal-planer). This removes two
+rough edges from the old setup: the manual `panel_custom` YAML entry, and an
+unverified assumption about when a Lovelace resource is actually loaded.
+Concretely:
 
-```yaml
-panel_custom:
-  - name: nativepop-panel
-    sidebar_title: Popup Manager
-    sidebar_icon: mdi:window-restore
-    module_url: /hacsfiles/NativePop/NativePop.js # confirm exact path below
-    embed_iframe: false
-    trust_external_script: false # set to true if you get a load-confirmation prompt
-```
+- HACS category is now **Integration**, not Dashboard.
+- Setup is "Add Integration" → confirm (no fields) — no YAML editing at all.
+- The sidebar panel self-registers via Python
+  (`panel_custom.async_register_panel()`).
+- The trigger listeners (`NativePop.js`, now
+  `custom_components/nativepop/www/nativepop.js`) auto-load on **every**
+  frontend page via `add_extra_js_url()` — not scoped to Lovelace dashboards,
+  which is a stronger guarantee than the old Lovelace-resource approach.
 
-The `module_url` should be the exact same URL HACS registered as a Lovelace
-resource — check **Settings > Dashboards > Resources** to confirm it (it
-should look like `/hacsfiles/NativePop/NativePop.js`, but confirm rather than
-assume). Restart HA (or reload) after adding this for the sidebar entry to
-appear.
+None of the actual trigger/dialog-mount logic changed — this is purely a
+packaging and registration upgrade.
+
+### If you have milestone 1-4 installed the old way, migrate first
+
+You'll have a HACS "Dashboard" category install plus a manual `panel_custom`
+YAML entry from testing earlier milestones. Clean those up before installing
+the integration, since both would otherwise conflict with the new setup
+(duplicate panel registration, duplicate `customElements.define` calls from
+two different files):
+
+1. Remove the `panel_custom:` block you added to `configuration.yaml` for
+   milestone 4 testing.
+2. **Settings > Dashboards > Resources**: remove the `NativePop.js` resource
+   entry HACS added automatically.
+3. In HACS, remove the old NativePop custom repository (Dashboard category).
+4. Continue with the install steps below.
+
+Your existing popup dashboards (e.g. `popup-test`) aren't affected — they're
+just HA storage dashboards, untouched by any of this.
 
 ### Try it locally via HACS (custom repository)
 
 1. In HA: **HACS > ... menu > Custom repositories**, add this repo's URL with
-   category **Dashboard**.
-2. Install "NativePop" through HACS. It will add `NativePop.js` as a Lovelace
-   resource automatically.
-3. In HA: **Settings > Dashboards > Add dashboard**, uncheck "Show in
-   sidebar", set a URL path (e.g. `popup-test`), add a couple of cards to its
-   single view.
-4. Add the test harness card to any dashboard:
+   category **Integration**.
+2. Install "NativePop" through HACS.
+3. **Settings > Devices & services > Add Integration**, search "NativePop",
+   confirm the single (field-free) setup step.
+4. Restart HA if the sidebar entry or trigger listeners don't seem to be
+   live yet (should generally not be needed, but it's a new integration in
+   this HA instance's first run).
+5. Confirm **"Popup Manager"** now appears in the sidebar automatically — no
+   YAML involved.
+6. If you don't already have one, create a test popup via the panel (or
+   reuse `popup-test` from earlier milestones) — see the panel test steps
+   below.
+7. Add the test harness card to any dashboard:
    `type: custom:nativepop-poc-card` (optionally with `popup: popup-<slug>`
    if you didn't use `popup-test`).
-5. Tap "Open popup (direct)" and "Open popup (navigate hash)" — same
-   behavior as before, just slug-driven now instead of hardcoded.
-6. **Validate the no-wrapper-card mechanism** — add two plain native
+8. Tap "Open popup (direct)" and "Open popup (navigate hash)".
+9. **Validate the no-wrapper-card mechanism** — add two plain native
    **Button** cards (via the real card picker, not YAML-only if you'd
    rather) with:
 
@@ -104,19 +126,18 @@ appear.
 
    Both should open the popup exactly like the PoC card's buttons, with no
    NativePop-specific card involved.
-7. Back-button check: open via either navigation method, then hit the
-   browser **back** button instead of closing — dialog should close and the
-   hash should disappear.
-8. **Automation trigger** — easiest test is **Developer Tools > Actions**:
-   pick "Fire an event", set Event Type to `nativepop_open_popup` and Event
-   Data to `popup: popup-test`, then perform the action — the popup should
-   open with no card or tap involved. (Or add it as an automation action the
-   same way, using the visual "Fire an event" action.)
-9. **Popup Manager panel** — add the `panel_custom` entry above to
-   `configuration.yaml`, restart, and open "Popup Manager" from the sidebar.
-   - Existing `popup-test` dashboard should show up in the list.
-   - "+ New popup" — enter a name, confirm it creates a hidden dashboard and
-     drops you straight into its edit mode.
-   - "Edit" on any row should open that dashboard in edit mode.
-   - "Delete" should remove it (with a confirmation prompt) and refresh the
-     list.
+10. Back-button check: open via either navigation method, then hit the
+    browser **back** button instead of closing — dialog should close and the
+    hash should disappear.
+11. **Automation trigger** — easiest test is **Developer Tools > Actions**:
+    pick "Fire an event", set Event Type to `nativepop_open_popup` and Event
+    Data to `popup: popup-test`, then perform the action — the popup should
+    open with no card or tap involved.
+12. **Popup Manager panel**:
+    - Existing popups should show up in the list.
+    - "+ New popup" — enter a name, confirm it creates a hidden dashboard,
+      defaults its view to `type: sections`, and drops you straight into
+      edit mode.
+    - "Edit" on any row should open that dashboard in edit mode.
+    - "Delete" should remove it (with a confirmation prompt) and refresh the
+      list.
