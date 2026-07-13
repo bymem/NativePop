@@ -56,12 +56,26 @@ every trigger (hash, fire-dom-event, automation) is wired to it.
   mwc-dialog's cramped default.
 - Close-on-outside-click turned out to already work by default (`ha-dialog`'s
   own behavior) — verified, no code needed.
-- The Popup Manager panel got a visual pass to feel more like a native HA
-  page: a real toolbar (with a working sidebar-toggle button on narrow/
-  mobile screens), list rows using HA's own list components instead of
-  hand-rolled bordered boxes, and icon buttons for actions. **I haven't been
-  able to test this live** — if spacing, icons, or the toolbar look off once
-  you see it, tell me specifics and I'll adjust rather than guessing again.
+- The Popup Manager panel got a visual pass, revised once already: the first
+  attempt used `ha-list`/`ha-list-item` (matching Settings > Dashboards'
+  general shape) but the row action buttons never rendered — that component's
+  `hasMeta`/slot contract couldn't be confirmed without live-testing. Rows are
+  now plain styled divs using only two individually-verified pieces
+  (`ha-icon`, `ha-icon-button`), which removes that whole class of risk. Still
+  themed with real HA CSS variables (divider color, secondary text color,
+  primary color).
+- "+ New popup" moved out of the toolbar to a fixed bottom-right button,
+  matching where Settings > Dashboards puts its "Add dashboard" action (a
+  FAB in the native page). HA itself removed the dedicated `ha-fab` component
+  in 2026.5, so ours is a plain raised button positioned with our own CSS
+  rather than the actual FAB machinery (which only works inside
+  `hass-tabs-subpage`, a much bigger component we deliberately aren't using).
+- Each popup row's `#url_path` text is now click-to-copy (with a native-style
+  toast confirmation via the same `hass-notification` event HA's own toasts
+  use). Falls back to the older `execCommand("copy")` technique if
+  `navigator.clipboard` isn't available — which it won't be over plain HTTP,
+  e.g. a local HA instance without TLS, since that API requires a secure
+  context.
 
 **Delivery model changed this milestone.** NativePop is no longer a
 frontend-only HACS "plugin" — it's now a small companion integration
@@ -151,10 +165,16 @@ just HA storage dashboards, untouched by any of this.
     open with no card or tap involved.
 12. **Popup Manager panel**:
     - Existing popups should show up in the list, each with a leading icon,
-      the title, and `#<url_path>` as secondary text.
-    - "+ New popup" — enter a name, confirm it creates a hidden dashboard,
-      defaults its view to `type: sections`, and drops you straight into
-      edit mode.
+      the title, and `#<url_path>` as secondary text — and, importantly this
+      time, three action icons (rename/edit/delete) visible on the right.
+    - Click the `#<url_path>` text — should copy it and show a toast
+      ("Copied ... to clipboard"). If your HA is plain HTTP, this exercises
+      the execCommand fallback rather than the Clipboard API — worth
+      confirming it actually copies (paste it somewhere) rather than just
+      showing the toast.
+    - "+ New popup" (now bottom-right) — enter a name, confirm it creates a
+      hidden dashboard, defaults its view to `type: sections`, and drops you
+      straight into edit mode.
     - Pencil icon ("Edit") on any row should open that dashboard in edit mode.
     - Rename icon on any row should prompt for a new name and update the
       title in place (url_path/hash stays the same — check an existing

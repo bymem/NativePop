@@ -84,8 +84,11 @@ entry — providing:
 - Rename / delete popup. Rename changes the `title` only (via `lovelace/dashboards/update`)
   — the `url_path`/slug stays fixed, since triggers (hash, fire-dom-event, automations)
   are wired to it and silently changing it would break every existing reference.
-- Copy popup slug/hash and example trigger YAML to clipboard (for both trigger styles) —
-  not built yet, still a nice-to-have.
+- Copy popup slug/hash to clipboard *(done, milestone 5)* — click-to-copy on each row's
+  `#url_path` text, with a native-style toast confirmation (`hass-notification` event).
+  Falls back to `execCommand("copy")` when `navigator.clipboard` isn't available (no
+  secure context, e.g. plain-HTTP local instances). Copying a ready-to-paste example
+  trigger YAML snippet (not just the bare slug) is still a nice-to-have, not built.
 - Optional: quick preview (render the popup's view read-only in a dialog).
 
 This panel is mostly CRUD UI wrapping existing dashboard WS commands. No rendering
@@ -276,9 +279,17 @@ exactly this kind of frontend-only functionality with better ergonomics:
    error instead of `alert()` on failure). Also restyled the Popup Manager
    panel to feel more native (unscoped, added at Mikkel's request): a real
    toolbar dispatching the same `hass-toggle-menu` event `ha-menu-button`
-   uses, `ha-list`/`ha-list-item` rows instead of hand-rolled divs,
-   `ha-icon-button` actions. Mobile-specific behavior (companion app testing)
-   still outstanding — no way to verify without a physical device.
+   uses, a bottom-right positioned "+ New popup" button (matching Settings >
+   Dashboards' FAB placement — HA itself dropped the actual `ha-fab`
+   component in 2026.5), and click-to-copy on each row's url_path/hash. Row
+   markup was revised mid-milestone: the first pass (`ha-list`/`ha-list-item`
+   with graphic/meta slots) shipped with broken action buttons — the
+   `hasMeta`/slot contract of that legacy MWC-based component couldn't be
+   confirmed without live-testing, and turned out wrong. Replaced with plain
+   styled divs using only individually-verified pieces (`ha-icon`,
+   `ha-icon-button`), which removes that whole class of risk going forward.
+   Mobile-specific behavior (companion app testing) still outstanding — no
+   way to verify without a physical device.
 6. **(Optional v2)**: metadata registry/backend helper if naming convention proves
    limiting; preview mode in sidebar panel; per-popup dialog size presets.
 

@@ -373,14 +373,27 @@ function slugify(text) {
 // sets `.hass` (repeatedly, on every state change), `.narrow`, and `.panel`
 // (the panel_custom config) on this element.
 //
-// Styled to match native HA panels: a toolbar with the same
-// `hass-toggle-menu` event ha-menu-button itself dispatches (we don't use
-// ha-menu-button directly since it reads Lit context that may not reach a
-// panel_custom element reliably — dispatching the event ourselves gets the
-// same real behavior without depending on that), ha-list/ha-list-item rows
-// (verified against src/panels/config/zone/ha-config-zone.ts, a real HA
-// settings page with the same list-of-named-things-with-edit/delete shape),
-// and ha-icon-button actions.
+// Row markup went through a revision: the first pass used <ha-list> +
+// <ha-list-item> with graphic/meta slots (matching
+// src/panels/config/zone/ha-config-zone.ts), but the meta slot's action
+// buttons never rendered in practice - ha-list-item's `hasMeta` requirement
+// comes from the underlying (pre-MD3) @material/mwc-list-item-base, and its
+// exact attribute-vs-property contract couldn't be confirmed without a live
+// HA instance to test against. Rather than guess again, rows are now plain
+// styled divs using only two verified, simple leaf components: <ha-icon>
+// (renders any "mdi:x" name directly) and <ha-icon-button> (falls back to
+// slotted content - here a <ha-icon> - when no raw SVG `.path` is given; see
+// src/components/ha-icon-button.ts). Visually modeled on
+// src/panels/config/lovelace/dashboards/ha-config-lovelace-dashboards.ts
+// (Settings > Dashboards - the closest native equivalent of this panel).
+//
+// The "+ New popup" button is a plain positioned button, not a real FAB -
+// HA itself removed the ha-fab component as of 2026.5 ("we use just a
+// normal ha-button now, since the position styling was always done from the
+// parent component"). The native page's FAB lives inside a
+// hass-tabs-subpage's `slot="fab"`, which only works within that specific
+// component; we replicate the visual (bottom-right, primary color) with our
+// own CSS instead of adopting hass-tabs-subpage's much larger surface area.
 class NativePopPanel extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
@@ -411,27 +424,46 @@ class NativePopPanel extends HTMLElement {
           position: sticky; top: 0; z-index: 1;
         }
         .toolbar .title { font-size: 20px; font-weight: 400; flex: 1; }
-        .content { padding: 16px; max-width: 600px; margin: 0 auto; }
-        ha-list-item .url-path { font-family: monospace; font-size: 12px; color: var(--secondary-text-color); }
-        .row-actions { display: flex; }
+        .content { padding: 16px; padding-bottom: 88px; max-width: 600px; margin: 0 auto; }
+        .popup-row {
+          display: flex; align-items: center; gap: 16px;
+          padding: 12px 8px; min-height: 48px;
+          border-bottom: 1px solid var(--divider-color);
+        }
+        .popup-row .row-icon { color: var(--secondary-text-color); flex-shrink: 0; }
+        .popup-row .row-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .popup-row .row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .popup-row .row-url {
+          font-family: monospace; font-size: 12px; color: var(--secondary-text-color);
+          cursor: pointer; width: fit-content;
+        }
+        .popup-row .row-url:hover { text-decoration: underline; }
+        .popup-row .row-actions { display: flex; flex-shrink: 0; }
         .empty { padding: 48px 24px; text-align: center; color: var(--secondary-text-color); }
+        .fab-button {
+          position: fixed; bottom: 16px; right: 16px; z-index: 2;
+          --mdc-theme-primary: var(--primary-color);
+          border-radius: 24px;
+        }
       </style>
       <div class="toolbar">
         <ha-icon-button class="menu-btn" label="Menu"><ha-icon icon="mdi:menu"></ha-icon></ha-icon-button>
         <span class="title">Popup Manager</span>
-        <mwc-button raised id="create-btn">+ New popup</mwc-button>
       </div>
       <div class="content">
         <div class="nativepop-loading" id="loading"><div class="nativepop-spinner"></div></div>
-        <ha-list id="list" hidden></ha-list>
+        <div id="list" hidden></div>
         <div class="empty" id="empty" hidden>No popups yet — create one to get started.</div>
       </div>
+      <mwc-button raised class="fab-button" id="create-btn">+ New popup</mwc-button>
     `;
 
     const menuBtn = this.querySelector(".menu-btn");
     if (this._narrow) {
       // Same event ha-menu-button itself dispatches on click (toggles the
-      // real sidebar) - see src/components/ha-menu-button.ts.
+      // real sidebar) - see src/components/ha-menu-button.ts. We dispatch it
+      // directly instead of using <ha-menu-button> itself, since that reads
+      // Lit context that may not reach a panel_custom element reliably.
       menuBtn.addEventListener("click", () => {
         this.dispatchEvent(new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true }));
       });
@@ -479,32 +511,27 @@ class NativePopPanel extends HTMLElement {
     listEl.hidden = false;
     listEl.innerHTML = "";
     for (const popup of popups) {
-      const item = document.createElement("ha-list-item");
-      item.setAttribute("twoline", "");
-      item.setAttribute("hasMeta", "");
-      item.innerHTML = `
-        <ha-icon slot="graphic" icon="mdi:window-restore"></ha-icon>
-        <span>${this._escape(popup.title)}</span>
-        <span slot="secondary" class="url-path">#${this._escape(popup.url_path)}</span>
-        <div slot="meta" class="row-actions">
+      const row = document.createElement("div");
+      row.className = "popup-row";
+      row.innerHTML = `
+        <ha-icon class="row-icon" icon="mdi:window-restore"></ha-icon>
+        <div class="row-info">
+          <span class="row-title">${this._escape(popup.title)}</span>
+          <span class="row-url" title="Click to copy">#${this._escape(popup.url_path)}</span>
+        </div>
+        <div class="row-actions">
           <ha-icon-button class="rename-btn" label="Rename"><ha-icon icon="mdi:rename-box"></ha-icon></ha-icon-button>
           <ha-icon-button class="edit-btn" label="Edit"><ha-icon icon="mdi:pencil"></ha-icon></ha-icon-button>
           <ha-icon-button class="delete-btn" label="Delete"><ha-icon icon="mdi:delete-outline"></ha-icon></ha-icon-button>
         </div>
       `;
-      item.querySelector(".rename-btn").addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        this._renamePopup(popup);
+      row.querySelector(".row-url").addEventListener("click", () => {
+        this._copyToClipboard(`#${popup.url_path}`);
       });
-      item.querySelector(".edit-btn").addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        this._editPopup(popup);
-      });
-      item.querySelector(".delete-btn").addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        this._deletePopup(popup);
-      });
-      listEl.appendChild(item);
+      row.querySelector(".rename-btn").addEventListener("click", () => this._renamePopup(popup));
+      row.querySelector(".edit-btn").addEventListener("click", () => this._editPopup(popup));
+      row.querySelector(".delete-btn").addEventListener("click", () => this._deletePopup(popup));
+      listEl.appendChild(row);
     }
   }
 
@@ -512,6 +539,38 @@ class NativePopPanel extends HTMLElement {
     const div = document.createElement("div");
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  _showToast(message) {
+    // Same event src/util/toast.ts's showToast() fires - a NotificationManager
+    // mounted at the app root listens for it and renders HA's real toast UI.
+    this.dispatchEvent(
+      new CustomEvent("hass-notification", { detail: { message }, bubbles: true, composed: true })
+    );
+  }
+
+  async _copyToClipboard(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // navigator.clipboard needs a secure context (HTTPS/localhost) - a
+        // plain-HTTP local HA instance won't have it. Fall back to the
+        // older (deprecated but still universally supported) technique.
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      this._showToast(`Copied "${text}" to clipboard`);
+    } catch (err) {
+      console.error("NativePop: could not copy to clipboard", err);
+      alert("NativePop: could not copy to clipboard. See console for details.");
+    }
   }
 
   // Opens the dashboard's native editor directly (spec 5.2) via HA's own
@@ -678,4 +737,4 @@ window.customCards.push({
   description: "Proof-of-concept test harness trigger for NativePop popups.",
 });
 
-console.info("NativePop: milestone 5 loaded (polish: rename, dialog loading state/sizing, native-styled panel)");
+console.info("NativePop: milestone 5 loaded (panel rework: plain-div rows, click-to-copy, positioned create button)");
