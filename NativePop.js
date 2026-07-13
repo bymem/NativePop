@@ -28,6 +28,28 @@
 // every navigate() call (see src/common/navigate.ts) — we now listen for
 // that too, otherwise a real `navigation_path: "#popup-<slug>"` tap would
 // have silently done nothing.
+//
+// In practice `tap_action: navigate` to a "#popup-<slug>" hash is the
+// recommended tap-trigger for real dashboards (tile cards, navbar cards,
+// etc.) — it's fully visual-editor friendly. `fire-dom-event` above still
+// works, but HA hid it from the visual action picker some releases back
+// (YAML-only now), so it's kept as a working fallback rather than the
+// primary path.
+//
+// Also new this milestone: automation-triggered popups, with no tap at all —
+// e.g. a security automation opening a popup on its own. HA has a built-in,
+// visually-editable "Fire an event" action that needs no custom backend
+// integration (docs: home-assistant.io/docs/scripts/#fire-an-event):
+//
+//   actions:
+//     - event: nativepop_open_popup
+//       event_data:
+//         popup: popup-security
+//
+// We subscribe to that event type over the same websocket connection `hass`
+// already uses. This broadcasts to every connected frontend session (same
+// as any other HA event) — there's no per-browser/per-user targeting in v1;
+// that would need the kind of backend component the spec avoids for now.
 
 const POPUP_HASH_PREFIX = "#popup-";
 const DEFAULT_POPUP_URL_PATH = "popup-test"; // fallback for the PoC card only
@@ -210,6 +232,35 @@ window.addEventListener("ll-custom", (ev) => {
       setTimeout(tick, 250);
     } else {
       console.warn("NativePop: gave up waiting for hass to open popup from initial hash");
+    }
+  };
+  tick();
+})();
+
+const NATIVEPOP_EVENT_TYPE = "nativepop_open_popup";
+
+// Automation-triggered popups (see file header) — subscribe once `hass` (and
+// its websocket connection) is available, then leave the subscription alive
+// for the page's lifetime. home-assistant-js-websocket re-subscribes
+// automatically after a reconnect, so this doesn't need to be redone.
+(function subscribeToPopupEvents() {
+  let attempts = 0;
+  const tick = () => {
+    const hass = getHass();
+    if (hass && hass.connection) {
+      hass.connection.subscribeEvents((event) => {
+        const popupUrlPath = event.data && event.data.popup;
+        if (popupUrlPath) {
+          openNativePopDialog(getHass(), popupUrlPath, { viaHash: false });
+        }
+      }, NATIVEPOP_EVENT_TYPE);
+      return;
+    }
+    attempts += 1;
+    if (attempts < 20) {
+      setTimeout(tick, 250);
+    } else {
+      console.warn("NativePop: gave up waiting for hass to subscribe to popup events");
     }
   };
   tick();

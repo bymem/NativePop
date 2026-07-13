@@ -23,7 +23,9 @@ create/edit/render machinery instead of reimplementing a card picker or grid sys
   not a custom clone of it.
 - Popups are reusable: define once, trigger from any card, any dashboard, any view.
 - Support both trigger styles Bubble Card offers: direct tap trigger, and
-  navigation/hash-based trigger (deep-linkable, back-button aware).
+  navigation/hash-based trigger (deep-linkable, back-button aware). Also support
+  automations opening a popup with no tap involved at all (e.g. a security alert),
+  via HA's built-in "Fire an event" action.
 - Sidebar panel to list, create, rename, delete, and jump into editing popups.
 - No dependency on `browser_mod`.
 
@@ -101,16 +103,45 @@ should be kept minimal — a thin mount/unmount wrapper, not a fork.
 
 ### 5.4 Trigger paths (both call into 5.3)
 
-- **Direct trigger**: `tap_action` → `fire-dom-event` with the target popup slug as
-  payload. Existing cards get this added without being replaced.
-- **Navigation trigger**: a global `hashchange`/`popstate` listener (registered once,
-  e.g. from the sidebar panel's module or a lightweight always-loaded resource) watches
-  for the `#popup-<slug>` pattern. On match, opens the dialog via 5.3; on hash removal
-  (back button, manual navigation away), closes it. `tap_action: navigate` with
-  `navigation_path: "#popup-<slug>"` becomes a valid way to open a popup from any card,
-  matching Bubble Card's `hash:` behavior.
+- **Navigation trigger (primary)**: a global `hashchange`/`popstate`/`location-changed`
+  listener (registered once, e.g. from the sidebar panel's module or a lightweight
+  always-loaded resource) watches for the `#popup-<slug>` pattern. On match, opens the
+  dialog via 5.3; on hash removal (back button, manual navigation away), closes it.
+  `tap_action: navigate` with `navigation_path: "#popup-<slug>"` is the recommended way
+  to open a popup from any card (tile cards, navbar cards, etc.) — it's fully
+  visual-editor friendly and matches Bubble Card's `hash:` behavior. Note:
+  `tap_action: navigate` uses `history.pushState()` internally, which does **not** fire
+  `hashchange`/`popstate` — HA fires its own `location-changed` event after navigate(),
+  which the listener must also watch for.
+- **Direct trigger (fallback, YAML-only)**: `tap_action: { action: fire-dom-event, ... }`
+  with the target popup slug as a payload key, dispatched as a bubbling/composed
+  `ll-custom` DOM event. Works from any card without a wrapper, but HA removed
+  `fire-dom-event` from the visual action picker (YAML-only now), so this is kept as a
+  working fallback rather than the primary trigger — resolves open question 9.1 in
+  favor of "generic action, no wrapper card," but in practice `navigate` covers the
+  real usage pattern (tile cards/navbars) better.
 
-### 5.5 Registry / metadata
+### 5.5 Automation trigger (no tap involved)
+
+A third trigger path, for popups an automation opens on its own (e.g. a security
+alert), with no card/tap involved at all:
+
+- Automations use HA's built-in, visually-editable **"Fire an event"** action — no
+  custom backend/integration needed:
+  ```yaml
+  actions:
+    - event: nativepop_open_popup
+      event_data:
+        popup: popup-security
+  ```
+- The frontend subscribes to that event type via `hass.connection.subscribeEvents()`
+  (standard `home-assistant-js-websocket` API) and opens the dialog via 5.3, same as a
+  direct trigger (no URL change).
+- This broadcasts to every connected frontend session, same as any other HA event —
+  there's no per-browser/per-user targeting in v1 (that would need a backend
+  component, which section 5.6 already avoids for v1).
+
+### 5.6 Registry / metadata
 
 Need a lightweight way to track "which dashboards are popups" beyond just URL prefix
 matching, to support renaming, filtering the sidebar list cleanly, and future metadata
@@ -146,6 +177,16 @@ storage helper if metadata needs grow.
 ```
 
 ```
+[Automation fires — no tap involved]
+  -> automation action: event: nativepop_open_popup, event_data: {popup: <url_path>}
+  -> frontend's hass.connection.subscribeEvents() callback fires
+  -> dialog mount (5.3): fetch dashboard config for popup's url_path
+  -> mount hui-view with fetched config inside ha-dialog
+  -> user interacts with real HA cards inside dialog
+  -> on close: unmount, cleanup (no hash/history involved)
+```
+
+```
 [User opens sidebar "Popup Manager"]
   -> list dashboards matching popup convention/registry
   -> create: WS call to create dashboard (show_in_sidebar: false, url_path: popup-*)
@@ -163,6 +204,7 @@ storage helper if metadata needs grow.
 | Hidden dashboards showing up unexpectedly (search, quick-bar, voice) | `show_in_sidebar: false` hides nav but may not hide from all HA surfaces | Verify behavior across HA search/quick-bar; document known limitations |
 | Storage dashboard count at scale | Many popups = many dashboards in `.storage/lovelace.*` | Acceptable for personal use scale; not a concern at Mikkel's scope |
 | Companion app (iOS) parity | Custom elements/dialogs, and hash-based navigation, sometimes behave differently in the app's webview | Test explicitly on iOS companion app, not just desktop browser |
+| Automation-triggered popups have no targeting | `nativepop_open_popup` events broadcast to every connected frontend session, not a specific browser/user | Document as a known v1 limitation; per-target delivery would need a backend component (out of scope, see 5.6) |
 
 ## 8. Milestones
 
@@ -171,8 +213,11 @@ storage helper if metadata needs grow.
    a dialog via direct trigger only. Validate the core idea before building tooling.
 2. **Navigation trigger**: add the `hashchange`/`popstate` listener and wire it into
    the same dialog mount from step 1. Validate deep-link + back-button behavior.
-3. **Trigger element v1**: generalize both trigger paths into reusable, configurable
-   mechanisms (slug-driven, not hardcoded).
+3. **Trigger element v1** *(done)*: generalized both trigger paths into
+   reusable, slug-driven mechanisms; resolved the `fire-dom-event` vs. `navigate`
+   question in favor of `navigate` as the primary tap trigger (see 5.4); added the
+   automation "Fire an event" trigger (see 5.5), not originally scoped but a natural
+   extension of "generalize trigger paths."
 4. **Sidebar panel v1**: list/create/delete popups (naming-convention based, no
    backend), create opens native dashboard editor directly.
 5. **Polish**: rename support, dialog sizing/mobile behavior, close-on-outside-click,
@@ -182,9 +227,11 @@ storage helper if metadata needs grow.
 
 ## 9. Open questions for implementation
 
-- Trigger element shape: standalone card, or a generic action usable from any card's
-  `tap_action` without adding a wrapper card? (Latter is closer to the original
-  `popup-card` UX and preferred if feasible.)
+- ~~Trigger element shape: standalone card, or a generic action usable from any card's
+  `tap_action` without adding a wrapper card?~~ **Resolved (milestone 3)**: no wrapper
+  card. `tap_action: navigate` to a `#popup-<slug>` hash is the primary mechanism
+  (visual-editor friendly); `fire-dom-event` works too but is YAML-only since HA
+  removed it from the visual action picker, so it's a fallback, not the primary path.
 - Should popup dashboards default to `type: sections` (native grid) or leave that as
   a user choice at creation time?
 - Where does the global hash listener live so it's always loaded (a small always-on
