@@ -281,13 +281,26 @@ exactly this kind of frontend-only functionality with better ergonomics:
    toolbar dispatching the same `hass-toggle-menu` event `ha-menu-button`
    uses, a bottom-right positioned "+ New popup" button (matching Settings >
    Dashboards' FAB placement — HA itself dropped the actual `ha-fab`
-   component in 2026.5), and click-to-copy on each row's url_path/hash. Row
-   markup was revised mid-milestone: the first pass (`ha-list`/`ha-list-item`
-   with graphic/meta slots) shipped with broken action buttons — the
-   `hasMeta`/slot contract of that legacy MWC-based component couldn't be
-   confirmed without live-testing, and turned out wrong. Replaced with plain
-   styled divs using only individually-verified pieces (`ha-icon`,
-   `ha-icon-button`), which removes that whole class of risk going forward.
+   component in 2026.5), and click-to-copy on each row's url_path/hash.
+
+   Two rounds of live-testing feedback, two fixes, same underlying lesson —
+   default to whatever the *exact* native reference file uses, rather than
+   approximating with a simpler/older component from elsewhere in this
+   codebase:
+   - Row markup: the first pass (`ha-list`/`ha-list-item` with graphic/meta
+     slots) shipped with broken action buttons — the `hasMeta`/slot contract
+     of that legacy MWC-based component couldn't be confirmed without
+     live-testing, and turned out wrong. Replaced with plain styled divs
+     using only individually-verified pieces (`ha-icon`, `ha-icon-button`),
+     which removes that whole class of risk going forward.
+   - The create button: first styled as `<mwc-button raised>` with a manual
+     `--mdc-theme-primary` override, which rendered but didn't look native.
+     `ha-button` (what the real "Add dashboard" button uses) isn't a themed
+     `mwc-button` — as of 2026.5 it wraps an entirely different design
+     system (`@home-assistant/webawesome`), so `mwc-button`'s CSS variables
+     never had any effect on it. Fixed by using bare `<ha-button size="l">`,
+     matching the native usage exactly instead of a lookalike.
+
    Mobile-specific behavior (companion app testing) still outstanding — no
    way to verify without a physical device.
 6. **(Optional v2)**: metadata registry/backend helper if naming convention proves

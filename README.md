@@ -67,9 +67,15 @@ every trigger (hash, fire-dom-event, automation) is wired to it.
 - "+ New popup" moved out of the toolbar to a fixed bottom-right button,
   matching where Settings > Dashboards puts its "Add dashboard" action (a
   FAB in the native page). HA itself removed the dedicated `ha-fab` component
-  in 2026.5, so ours is a plain raised button positioned with our own CSS
-  rather than the actual FAB machinery (which only works inside
-  `hass-tabs-subpage`, a much bigger component we deliberately aren't using).
+  in 2026.5, so ours is positioned with our own CSS rather than the actual
+  FAB machinery (which only works inside `hass-tabs-subpage`, a much bigger
+  component we deliberately aren't using). It's now `<ha-button size="l">`
+  (not `mwc-button`, which is what the first pass used and didn't look
+  native — turns out `ha-button` isn't a styled `mwc-button`, it wraps HA's
+  newer webawesome-based design system as of 2026.5, with its own theming
+  that `mwc-button`'s CSS variables don't touch). Matches the native "Add
+  dashboard" button's usage exactly: no variant/appearance override, just
+  `size="l"`.
 - Each popup row's `#url_path` text is now click-to-copy (with a native-style
   toast confirmation via the same `hass-notification` event HA's own toasts
   use). Falls back to the older `execCommand("copy")` technique if
@@ -172,8 +178,10 @@ just HA storage dashboards, untouched by any of this.
       the execCommand fallback rather than the Clipboard API — worth
       confirming it actually copies (paste it somewhere) rather than just
       showing the toast.
-    - "+ New popup" (now bottom-right) — enter a name, confirm it creates a
-      hidden dashboard, defaults its view to `type: sections`, and drops you
+    - "+ New popup" (now bottom-right) should render as a filled, pill-shaped
+      button in your theme's accent color, matching Settings > Dashboards'
+      "Add dashboard" button. Enter a name, confirm it creates a hidden
+      dashboard, defaults its view to `type: sections`, and drops you
       straight into edit mode.
     - Pencil icon ("Edit") on any row should open that dashboard in edit mode.
     - Rename icon on any row should prompt for a new name and update the

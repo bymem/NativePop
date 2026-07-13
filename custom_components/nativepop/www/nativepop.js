@@ -387,13 +387,24 @@ function slugify(text) {
 // src/panels/config/lovelace/dashboards/ha-config-lovelace-dashboards.ts
 // (Settings > Dashboards - the closest native equivalent of this panel).
 //
-// The "+ New popup" button is a plain positioned button, not a real FAB -
-// HA itself removed the ha-fab component as of 2026.5 ("we use just a
+// The "+ New popup" button is a plain positioned <ha-button>, not a real FAB
+// - HA itself removed the ha-fab component as of 2026.5 ("we use just a
 // normal ha-button now, since the position styling was always done from the
 // parent component"). The native page's FAB lives inside a
 // hass-tabs-subpage's `slot="fab"`, which only works within that specific
-// component; we replicate the visual (bottom-right, primary color) with our
-// own CSS instead of adopting hass-tabs-subpage's much larger surface area.
+// component; we replicate the visual (bottom-right) with our own CSS
+// instead of adopting hass-tabs-subpage's much larger surface area.
+//
+// Uses <ha-button> specifically, not <mwc-button> (used elsewhere in this
+// file) - the first attempt used mwc-button styled with --mdc-theme-primary,
+// which rendered but didn't look native. Turns out ha-button isn't just a
+// styled mwc-button: as of 2026.5 it wraps @home-assistant/webawesome's
+// Button (see src/components/ha-button.ts) - a different design system
+// entirely, with its own theming (--ha-color-*, --ha-border-radius-pill,
+// etc.) that mwc-button's CSS custom properties don't touch. The native
+// "Add dashboard" button (ha-config-lovelace-dashboards.ts) uses bare
+// `<ha-button size="l">` with no variant/appearance override, so that's
+// replicated as-is here rather than guessing at further styling.
 class NativePopPanel extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
@@ -442,8 +453,6 @@ class NativePopPanel extends HTMLElement {
         .empty { padding: 48px 24px; text-align: center; color: var(--secondary-text-color); }
         .fab-button {
           position: fixed; bottom: 16px; right: 16px; z-index: 2;
-          --mdc-theme-primary: var(--primary-color);
-          border-radius: 24px;
         }
       </style>
       <div class="toolbar">
@@ -455,7 +464,10 @@ class NativePopPanel extends HTMLElement {
         <div id="list" hidden></div>
         <div class="empty" id="empty" hidden>No popups yet — create one to get started.</div>
       </div>
-      <mwc-button raised class="fab-button" id="create-btn">+ New popup</mwc-button>
+      <ha-button size="l" class="fab-button" id="create-btn">
+        <ha-icon slot="start" icon="mdi:plus"></ha-icon>
+        New popup
+      </ha-button>
     `;
 
     const menuBtn = this.querySelector(".menu-btn");
@@ -737,4 +749,4 @@ window.customCards.push({
   description: "Proof-of-concept test harness trigger for NativePop popups.",
 });
 
-console.info("NativePop: milestone 5 loaded (panel rework: plain-div rows, click-to-copy, positioned create button)");
+console.info("NativePop: milestone 5 loaded (panel rework: plain-div rows, click-to-copy, ha-button create button)");
