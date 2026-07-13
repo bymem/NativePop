@@ -81,8 +81,11 @@ entry — providing:
 - List of all popup dashboards (filtered by URL path prefix or a config registry —
   see 5.5).
 - Create new popup (prompts for name → creates hidden dashboard, opens it in edit mode).
-- Rename / delete popup.
-- Copy popup slug/hash and example trigger YAML to clipboard (for both trigger styles).
+- Rename / delete popup. Rename changes the `title` only (via `lovelace/dashboards/update`)
+  — the `url_path`/slug stays fixed, since triggers (hash, fire-dom-event, automations)
+  are wired to it and silently changing it would break every existing reference.
+- Copy popup slug/hash and example trigger YAML to clipboard (for both trigger styles) —
+  not built yet, still a nice-to-have.
 - Optional: quick preview (render the popup's view read-only in a dialog).
 
 This panel is mostly CRUD UI wrapping existing dashboard WS commands. No rendering
@@ -265,8 +268,17 @@ exactly this kind of frontend-only functionality with better ergonomics:
    (`custom_components/nativepop/`), self-registering the panel and
    auto-loading the trigger listeners with no manual YAML. Rename deferred
    to milestone 5, as originally scoped.
-5. **Polish**: rename support, dialog sizing/mobile behavior, close-on-outside-click,
-   loading state while config fetches.
+5. **Polish** *(done)*: rename support (title only, url_path stays fixed —
+   see 5.2); dialog widened via `--ha-dialog-width-md`; close-on-outside-click
+   verified already-default (`ha-dialog`'s `lightDismiss`, no code needed);
+   loading state while config fetches (dialog opens immediately with a
+   spinner, swaps in `hui-view` once the WS fetch resolves, shows an inline
+   error instead of `alert()` on failure). Also restyled the Popup Manager
+   panel to feel more native (unscoped, added at Mikkel's request): a real
+   toolbar dispatching the same `hass-toggle-menu` event `ha-menu-button`
+   uses, `ha-list`/`ha-list-item` rows instead of hand-rolled divs,
+   `ha-icon-button` actions. Mobile-specific behavior (companion app testing)
+   still outstanding — no way to verify without a physical device.
 6. **(Optional v2)**: metadata registry/backend helper if naming convention proves
    limiting; preview mode in sidebar panel; per-popup dialog size presets.
 

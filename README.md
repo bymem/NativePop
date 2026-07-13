@@ -6,7 +6,7 @@ editor, trigger via tap or navigation, reusable across dashboards.
 See [ha-popup-builder-spec.md](ha-popup-builder-spec.md) for the full technical
 spec and milestone plan.
 
-## Status: Milestone 4 (sidebar panel + integration-based delivery)
+## Status: Milestone 5 (polish)
 
 All trigger paths are slug-driven and usable without any NativePop-specific
 wrapper card:
@@ -39,13 +39,29 @@ The `nativepop-poc-card` from earlier milestones still works (now with a
 configurable `popup:` key) as a quick test harness, but it's no longer the
 recommended way to trigger a popup — see the native-card tests below.
 
-**Sidebar panel** ("Popup Manager", `nativepop-panel`) lists, creates, and
-deletes popups — no more manually creating dashboards through Settings.
-Naming-convention based (any dashboard with a `popup-*` url_path counts, no
-metadata storage yet). Create prompts for a name, derives the url_path by
-slugifying it, creates the hidden dashboard, defaults its view to
+**Sidebar panel** ("Popup Manager", `nativepop-panel`) lists, creates,
+renames, and deletes popups — no more manually creating dashboards through
+Settings. Naming-convention based (any dashboard with a `popup-*` url_path
+counts, no metadata storage yet). Create prompts for a name, derives the
+url_path by slugifying it, creates the hidden dashboard, defaults its view to
 `type: sections`, and opens it straight into edit mode (`?edit=1`). Rename
-isn't in v1 yet (milestone 5).
+only changes the display title — the url_path stays fixed on purpose, since
+every trigger (hash, fire-dom-event, automation) is wired to it.
+
+**This milestone's polish**:
+- The trigger dialog now opens immediately with a loading spinner instead of
+  a silent delay, then swaps in the real popup content once it's fetched (or
+  shows an inline error if the fetch fails, instead of a jarring `alert()`).
+- The dialog is now noticeably wider (`min(90vw, 1024px)`) instead of
+  mwc-dialog's cramped default.
+- Close-on-outside-click turned out to already work by default (`ha-dialog`'s
+  own behavior) — verified, no code needed.
+- The Popup Manager panel got a visual pass to feel more like a native HA
+  page: a real toolbar (with a working sidebar-toggle button on narrow/
+  mobile screens), list rows using HA's own list components instead of
+  hand-rolled bordered boxes, and icon buttons for actions. **I haven't been
+  able to test this live** — if spacing, icons, or the toolbar look off once
+  you see it, tell me specifics and I'll adjust rather than guessing again.
 
 **Delivery model changed this milestone.** NativePop is no longer a
 frontend-only HACS "plugin" — it's now a small companion integration
@@ -134,10 +150,20 @@ just HA storage dashboards, untouched by any of this.
     Data to `popup: popup-test`, then perform the action — the popup should
     open with no card or tap involved.
 12. **Popup Manager panel**:
-    - Existing popups should show up in the list.
+    - Existing popups should show up in the list, each with a leading icon,
+      the title, and `#<url_path>` as secondary text.
     - "+ New popup" — enter a name, confirm it creates a hidden dashboard,
       defaults its view to `type: sections`, and drops you straight into
       edit mode.
-    - "Edit" on any row should open that dashboard in edit mode.
-    - "Delete" should remove it (with a confirmation prompt) and refresh the
-      list.
+    - Pencil icon ("Edit") on any row should open that dashboard in edit mode.
+    - Rename icon on any row should prompt for a new name and update the
+      title in place (url_path/hash stays the same — check an existing
+      trigger still works afterward).
+    - Trash icon ("Delete") should remove it (with a confirmation prompt) and
+      refresh the list.
+    - On a narrow window (or the companion app), check the hamburger icon in
+      the panel's toolbar actually opens the sidebar.
+13. **Dialog polish** — open any popup and confirm: it opens noticeably
+    wider than before; briefly shows a spinner before content appears (may be
+    too fast to see on a fast connection/LAN, that's fine); and clicking
+    outside the dialog (on the dimmed background) closes it.
