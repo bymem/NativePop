@@ -155,7 +155,7 @@ custom CSS variables) apply regardless of `isNarrow()` — only the *width* over
 is desktop-only by design; header text and arbitrary CSS variables aren't inherently
 a desktop-vs-mobile concern the way a fixed pixel width is.
 
-**Content padding** *(done, milestone 5, five-round fix — a case study in why "verify
+**Content padding** *(done, milestone 5, six-round fix — a case study in why "verify
 against source" isn't the same as "verify live")*: popup content was sitting
 double-inset from the dialog's edge — two nested padding sources stacking on each
 other.
@@ -182,18 +182,35 @@ other.
   returned `null` — the injection itself wasn't landing, a JS bug, not a CSS one).
 - Round 5 changed method entirely: asked for a live browser-console test instead of
   reading more source. Confirmed directly in DevTools that `.wrapper`'s CSS
-  (`padding: 0 var(--column-gap)`) matched round 2/3's understanding exactly, *and*
-  that manually setting `--ha-view-sections-column-gap`/`--narrow-column-gap`
-  **directly on the `hui-sections-view` element itself** (not an ancestor) removed
-  the padding immediately. This pinpointed the actual bug: the variables and the
-  target element were both right all along — the problem was *distance*.
-  `ha-adaptive-dialog`'s internal desktop/mobile split sits between `dialog` and
-  `hui-view` and evidently redefines them somewhere in there. `hui-view` has no
-  shadow root of its own (renders straight into light DOM) and `hui-sections-view`
-  is its direct light-DOM child, so setting the two variables on `view` (which we
-  create ourselves, synchronously, before it's ever rendered) crosses no shadow
-  boundary and needs no wait/retry — fixed for good, replacing round 4's
-  shadow-root-injection approach entirely.
+  (`padding: 0 var(--column-gap)`) matched round 2/3's understanding, *and* that
+  manually setting `--ha-view-sections-column-gap`/`--narrow-column-gap` **directly
+  on the `hui-sections-view` element itself** (not an ancestor) removed the padding
+  immediately. Read as confirming a pure "distance" problem — `hui-view` has no
+  shadow root of its own and `hui-sections-view` is its direct light-DOM child, so
+  setting the two variables on `view` (created ourselves, synchronously, before it's
+  ever rendered - no wait/retry/flash needed) should cross no shadow boundary.
+  Implemented, but **`--narrow-column-gap` alone still had no effect** once retested
+  live (`--ha-view-sections-column-gap` correctly computed as `0` on both `view` and
+  `hui-sections-view`; `--narrow-column-gap` computed `0` on `view` but `8px` on
+  `hui-sections-view` — proof the "distance" theory was only half right).
+- Round 6 stopped reading GitHub source entirely and used the Styles panel's filter
+  (searching `hui-sections-view` for `narrow-column-gap` across its full matched +
+  inherited cascade) to read its *actual, currently-running* adopted stylesheet
+  directly. That showed `hui-sections-view`'s `:host` rule redefines
+  **`--narrow-column-gap` itself**, sourced from `var(--ha-view-sections-narrow-column-gap,
+  8px)` — a variable name that doesn't appear anywhere in the `dev` branch source read
+  earlier (either a version difference or an incomplete/stale fetch; never fully
+  root-caused, and not worth chasing further given the live answer was in hand).
+  Same redefinition pattern as `--column-gap` itself, just missed the first time
+  because only `--column-gap`'s redefinition was checked, not every property in that
+  `:host` block. Fixed by setting `--ha-view-sections-narrow-column-gap` (not
+  `--narrow-column-gap`) on `view` alongside `--ha-view-sections-column-gap`.
+
+The concrete lesson going forward, worth remembering for the next time HA's internal
+component styling needs to be overridden: source-reading (even direct GitHub fetches)
+found the wrong variable twice and the wrong element once, all while looking
+individually plausible; the Styles panel's cross-cascade filter on the actual live
+element settled it in one step both times it was tried.
 
 Applied before the popup's own custom CSS variables (5.2), which are now applied to
 *both* `dialog` (chrome-level variables) and `view` (content-level variables like

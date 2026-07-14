@@ -46,7 +46,7 @@ like the gutter ones below — see the note on why that split matters):
 | `--ha-dialog-header-title-font-weight` | `var(--ha-font-weight-normal)` | Header title text weight | dialog |
 | `--ha-dialog-header-title-line-height` | `var(--ha-line-height-condensed)` | Header title line height | dialog |
 | `--ha-view-sections-column-gap` | **`0`** (`hui-sections-view`'s own default: 32px, ≥600px width) | Feeds `hui-sections-view`'s `.wrapper` div's horizontal padding | view |
-| `--narrow-column-gap` | **`0`** (effectively 8px by default) | Same, <600px width | view |
+| `--ha-view-sections-narrow-column-gap` | **`0`** (`hui-sections-view`'s own default: 8px, <600px width) | Same, <600px width | view |
 
 **Don't set `--ha-dialog-width-*` here** — desktop width already has its own
 dedicated "Dialog width" field in the same settings dialog (applied to
@@ -56,18 +56,26 @@ applied afterward and silently win over that field instead of erroring.
 Header/subheader text itself isn't a CSS variable — set those via the
 "Popup header"/"Popup subheader" fields in the same settings dialog.
 
-**Why "applies to" matters**: `--ha-view-sections-column-gap`/
-`--narrow-column-gap` (which zero `hui-sections-view`'s nested grid gutter,
-by default — this is what previously made popup content look inset from the
-dialog edge) only work when set on `hui-view` itself, not on the outer
-dialog — confirmed live in a browser console, not just from source. Some
-shadow-DOM boundary inside `ha-adaptive-dialog`'s own internals (its
-desktop/mobile split, most likely) redefines them before they'd otherwise
-reach `hui-sections-view`. `hui-view` has no shadow root of its own and
-`hui-sections-view` is its direct light-DOM child, so setting them there
-crosses no shadow boundary at all. The dialog-chrome variables above don't
-have this problem since they're consumed by `ha-dialog` itself, which *is*
-the element they're set on.
+**Why "applies to" matters**: the two `--ha-view-sections-*` variables above
+(which zero `hui-sections-view`'s nested grid gutter — this is what
+previously made popup content look inset from the dialog edge) only work
+when set on `hui-view` itself, not on the outer dialog. `hui-view` has no
+shadow root of its own and `hui-sections-view` is its direct light-DOM
+child, so setting them there crosses no shadow boundary at all — whereas
+several shadow-DOM layers sit between the outer dialog and `hui-sections-view`
+(`ha-adaptive-dialog`'s internal desktop/mobile split). The dialog-chrome
+variables above don't have this problem since they're consumed by
+`ha-dialog` itself, which *is* the element they're set on.
+
+Getting the exact variable names right took a fair bit of live
+troubleshooting — `hui-sections-view`'s `:host` rule redefines
+`--column-gap` and `--narrow-column-gap` *itself*, sourcing them from
+`--ha-view-sections-column-gap` / `--ha-view-sections-narrow-column-gap`
+respectively (confirmed by reading its actual adopted stylesheet live in
+DevTools, not from GitHub source, which turned out to not match what was
+actually running). Setting `--column-gap`/`--narrow-column-gap` directly, or
+setting the right two variables on the wrong element (the outer dialog
+instead of `hui-view`), both silently do nothing.
 
 ## Status: Milestone 5 (polish)
 
@@ -125,14 +133,15 @@ variables" below).
 - Removed `hui-sections-view`'s own nested grid gutter, which was stacking
   on top of the dialog's own normal content padding (`--dialog-content-padding`,
   left alone on purpose) and making popup content double-inset from the
-  dialog's edge. Took several rounds of setting the right variables in the
-  wrong place before landing on the actual fix: `--ha-view-sections-column-gap`/
-  `--narrow-column-gap` are the correct variables, but only work when set on
-  `hui-view` directly (its direct light-DOM child, no shadow boundary in the
-  way) — setting them on the outer dialog, several shadow-DOM boundaries
-  further out, silently didn't reach it. Confirmed live via the browser
-  console before writing the fix, not guessed again. See "Popup dialog CSS
-  variables" above.
+  dialog's edge. Took several rounds to actually land — both the *which
+  element* question (`hui-view`, not the outer dialog several shadow-DOM
+  boundaries further out) and the *which variable* question
+  (`--ha-view-sections-column-gap`/`--ha-view-sections-narrow-column-gap`,
+  not `--column-gap`/`--narrow-column-gap` directly, both of which
+  `hui-sections-view` redefines on its own `:host`) needed to be right
+  together. Settled by reading `hui-sections-view`'s actual adopted
+  stylesheet live in DevTools instead of trusting GitHub source further.
+  See "Popup dialog CSS variables" above.
 - Close-on-outside-click turned out to already work by default (`ha-dialog`'s
   own behavior) — verified, no code needed.
 - The Popup Manager panel's list went through a few revisions before landing

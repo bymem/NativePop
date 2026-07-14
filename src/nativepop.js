@@ -410,15 +410,26 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   view.lovelace = lovelace;
   view.index = 0; // popup dashboards are single-view (spec 5.1)
   view.narrow = false;
-  // hui-sections-view (view's direct light-DOM child - hui-view has no
-  // shadow root of its own) reads these two to compute --column-gap, its
-  // own nested ".wrapper" div's horizontal padding - confirmed live via the
-  // browser console, not just from source, that setting them here (as
-  // opposed to on `dialog`, several shadow-DOM boundaries further out)
-  // actually reaches it. Set synchronously before `view` is ever rendered,
-  // so there's no flash of the padded state first.
+  // hui-sections-view's own :host rule (read live from its actual adopted
+  // stylesheet via DevTools, not from GitHub source, which turned out
+  // stale/incomplete) is:
+  //   :host {
+  //     --column-gap: var(--ha-view-sections-column-gap, 32px);
+  //     --narrow-column-gap: var(--ha-view-sections-narrow-column-gap, 8px);
+  //     ...
+  //   }
+  //   @media (width <= 600px) { :host { --column-gap: var(--narrow-column-gap); } }
+  // So --narrow-column-gap is ALSO locally redefined by :host, same as
+  // --column-gap itself - overriding it directly (what earlier attempts
+  // did) never had a chance. --ha-view-sections-narrow-column-gap is the
+  // real upstream source, matching the naming pattern of every other
+  // variable in that :host block. hui-view has no shadow root of its own
+  // and hui-sections-view is its direct light-DOM child, so setting both
+  // of these on `view` - which we create ourselves, synchronously, before
+  // it's ever rendered - reaches it with no shadow boundary and no
+  // wait/retry/flash-of-unstyled-content risk.
   view.style.setProperty("--ha-view-sections-column-gap", "0");
-  view.style.setProperty("--narrow-column-gap", "0");
+  view.style.setProperty("--ha-view-sections-narrow-column-gap", "0");
   // Popup custom CSS variables are applied to both `dialog` (chrome-level
   // things like border-radius, header font size) and `view` (content-level
   // things like the two above) - given the shadow-distance surprise just

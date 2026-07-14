@@ -416,7 +416,7 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   view.index = 0;
   view.narrow = false;
   view.style.setProperty("--ha-view-sections-column-gap", "0");
-  view.style.setProperty("--narrow-column-gap", "0");
+  view.style.setProperty("--ha-view-sections-narrow-column-gap", "0");
   applyCustomCssVariables(view, popupView.nativepop_css_variables);
   content.remove();
   dialog.appendChild(view);
