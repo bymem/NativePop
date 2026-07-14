@@ -645,13 +645,12 @@ var NativePopPanel = class extends HTMLElement {
         // headroom instead of an exact-fit cap.
         minWidth: "168px",
         showNarrow: true,
-        // Three plain ha-icon-buttons instead of an overflow menu - Mikkel
-        // wants all three actions visible on the row, not collapsed behind
-        // a "⋮". Using .path= directly (real SVG data, see ICON_PATHS) now
-        // that real Lit templates are available, rather than the
-        // slotted-<ha-icon> fallback used before the build step existed.
-        // "Rename" is now "Settings" (cog icon) - repurposed to cover
-        // rename + how the popup's dialog looks when it opens (5.2).
+        // Three plain ha-icon-buttons, all visible on the row at once,
+        // instead of an overflow menu. Uses .path= directly (real SVG data,
+        // see ICON_PATHS) now that real Lit templates are available, rather
+        // than the slotted-<ha-icon> fallback used before the build step
+        // existed. "Settings" (cog icon) covers rename + how the popup's
+        // dialog looks when it opens.
         template: (popup) => b`
           <div style="display: flex; width: 100%; justify-content: flex-end;">
             <ha-icon-button
@@ -949,7 +948,7 @@ var NativePopPanel = class extends HTMLElement {
   }
 };
 customElements.define("nativepop-panel", NativePopPanel);
-var NativePopPocCard = class extends HTMLElement {
+var NativePopTriggerExampleCard = class extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
     this._popup = this._config.popup || DEFAULT_POPUP_URL_PATH;
@@ -963,7 +962,7 @@ var NativePopPocCard = class extends HTMLElement {
     }
     this._rendered = true;
     this.innerHTML = `
-      <ha-card header="NativePop PoC">
+      <ha-card header="NativePop Trigger Example">
         <div style="padding: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
           <mwc-button raised id="direct-btn">Open popup (direct)</mwc-button>
           <mwc-button raised id="hash-btn">Open popup (navigate hash)</mwc-button>
@@ -988,14 +987,14 @@ var NativePopPocCard = class extends HTMLElement {
     return 2;
   }
 };
-customElements.define("nativepop-poc-card", NativePopPocCard);
+customElements.define("nativepop-trigger-example", NativePopTriggerExampleCard);
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: "nativepop-poc-card",
-  name: "NativePop PoC",
-  description: "Proof-of-concept test harness trigger for NativePop popups."
+  type: "nativepop-trigger-example",
+  name: "NativePop Trigger Example",
+  description: "Example card demonstrating NativePop's direct and hash-navigation triggers."
 });
-console.info("NativePop: milestone 5 loaded (panel now uses ha-data-table: sortable columns, search, overflow menu)");
+console.info("NativePop loaded");
 /*! Bundled license information:
 
 lit-html/lit-html.js:

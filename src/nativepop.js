@@ -1,130 +1,57 @@
-// NativePop — Milestones 1-5 proof of concept
+// NativePop frontend module.
 //
-// Milestone 1: hardcoded direct-trigger card that fetches one manually-created
-// hidden dashboard's config and mounts it via HA's internal `hui-view` inside
-// a dialog.
-// Milestone 2: a global hashchange/popstate listener opens the same dialog
-// when navigating to "#popup-<slug>" (deep link, back-button aware).
-// Milestone 3: generalizes both trigger paths so they're slug-driven instead
-// of hardcoded, and makes the direct trigger usable from ANY card's
-// tap_action (native or custom) without a wrapper card — resolving spec
-// open question 9.1 in favor of the generic-action approach:
+// Auto-loaded on every Home Assistant frontend page by the companion
+// integration (custom_components/nativepop/) via add_extra_js_url(), so the
+// trigger listeners below are always live. Also registers the "Popup
+// Manager" sidebar panel (self-registered by the integration via
+// panel_custom.async_register_panel() - no manual configuration.yaml entry
+// needed).
 //
-//   tap_action:
-//     action: fire-dom-event
-//     nativepop_popup: popup-test
+// Three ways to trigger a popup, all funneling into the same dialog mount
+// (openNativePopDialog):
 //
-// This works because HA's own `fire-dom-event` action dispatches a
-// `CustomEvent("ll-custom", { bubbles: true, composed: true, detail: <actionConfig> })`
-// on the card element (see src/panels/lovelace/common/handle-action.ts) — any
-// card that uses HA's shared action handler gets this for free. A handful of
-// custom cards hand-roll their own click handling and won't fire it; that's a
-// known limitation of the mechanism itself, not something we can fix here.
+// 1. Navigate to a "#popup-<slug>" hash - the recommended tap trigger, fully
+//    visual-editor friendly:
+//      tap_action: { action: navigate, navigation_path: "#popup-<slug>" }
+//    `navigate` internally uses history.pushState(), which never fires
+//    `hashchange`/`popstate` on its own (standard browser behavior) - HA
+//    fires its own `location-changed` event after every navigate() call
+//    (see src/common/navigate.ts), which is why that's included below
+//    alongside hashchange/popstate.
 //
-// The navigation trigger also picked up a real bug fix this milestone: real
-// `tap_action: navigate` calls `history.pushState()` internally, which never
-// fires `hashchange` or `popstate` (standard browser behavior). HA works
-// around that by firing its own `"location-changed"` event on `window` after
-// every navigate() call (see src/common/navigate.ts) — we now listen for
-// that too, otherwise a real `navigation_path: "#popup-<slug>"` tap would
-// have silently done nothing.
+// 2. `fire-dom-event`, a YAML-only fallback (HA's visual action picker
+//    doesn't expose this action, though it still works):
+//      tap_action: { action: fire-dom-event, nativepop_popup: "popup-<slug>" }
+//    HA's `fire-dom-event` action dispatches a
+//    `CustomEvent("ll-custom", { bubbles: true, composed: true, detail: <actionConfig> })`
+//    on the card element (see src/panels/lovelace/common/handle-action.ts) -
+//    any card using HA's shared action handler gets this for free. A
+//    handful of custom cards hand-roll their own click handling and won't
+//    fire it.
 //
-// In practice `tap_action: navigate` to a "#popup-<slug>" hash is the
-// recommended tap-trigger for real dashboards (tile cards, navbar cards,
-// etc.) — it's fully visual-editor friendly. `fire-dom-event` above still
-// works, but HA hid it from the visual action picker some releases back
-// (YAML-only now), so it's kept as a working fallback rather than the
-// primary path.
+// 3. An automation's built-in "Fire an event" action, no tap involved at all:
+//      actions:
+//        - event: nativepop_open_popup
+//          event_data:
+//            popup: popup-<slug>
+//    We subscribe to that event type over the same websocket connection
+//    `hass` already uses. This broadcasts to every connected frontend
+//    session - there's no per-browser/per-user targeting.
 //
-// Also new this milestone: automation-triggered popups, with no tap at all —
-// e.g. a security automation opening a popup on its own. HA has a built-in,
-// visually-editable "Fire an event" action that needs no custom backend
-// integration (docs: home-assistant.io/docs/scripts/#fire-an-event):
+// Popups are naming-convention based: any dashboard whose url_path starts
+// with "popup-" counts, no metadata registry.
 //
-//   actions:
-//     - event: nativepop_open_popup
-//       event_data:
-//         popup: popup-security
-//
-// We subscribe to that event type over the same websocket connection `hass`
-// already uses. This broadcasts to every connected frontend session (same
-// as any other HA event) — there's no per-browser/per-user targeting in v1.
-//
-// Milestone 4: sidebar panel ("Popup Manager"), plus a delivery pivot — this
-// file is now served by the NativePop *integration*
-// (custom_components/nativepop/), not a HACS "plugin"/Lovelace-resource
-// install. The integration's frontend.py auto-loads this module on every
-// frontend page via `add_extra_js_url()` (so the trigger listeners are
-// always live, no manual "add resource" step) and registers the sidebar
-// panel via `panel_custom.async_register_panel()` (so no manual
-// configuration.yaml entry either) — both self-register the moment the
-// integration's (config-free) config flow is confirmed. List/create/delete
-// only in v1, naming-convention based (any dashboard whose url_path starts
-// with "popup-" counts, per spec 5.6 — no backend/metadata registry).
-//
-// Milestone 5 (polish): rename support; dialog loading state + widened
-// sizing; close-on-outside-click (already ha-dialog's default); create/rename
-// moved off prompt() onto a real dialog (ha-dialog + ha-form + ha-dialog-footer
-// + ha-button, matching dialog-lovelace-dashboard-detail.ts); click-to-copy on
-// each row's url_path/hash.
-//
-// The Popup Manager panel's list went through a real architecture change
-// partway through milestone 5: it started as hand-rolled bordered divs, then
-// plain divs styled to look like a list (after ha-list/ha-list-item's meta
-// slot turned out not to render reliably), but Mikkel kept pointing back to
-// the same lesson - stop approximating the native "Manage dashboards" page
-// (ha-config-lovelace-dashboards.ts), use its actual components. That page's
-// list is a `hass-tabs-subpage-data-table` wrapping `ha-data-table`, with
-// built-in sortable columns, click-to-open rows, an overflow menu per row,
-// AND a built-in search box — exactly the "add search" ask too.
-//
-// The catch: `ha-data-table` columns that render anything beyond plain text
-// (icons, the overflow menu) require a `column.template` function returning
-// a real Lit `TemplateResult` - a plain HTML string gets auto-escaped as
-// literal text by Lit's XSS protection, not parsed as markup. That needs
-// `lit-html`'s `html` tag, which isn't available without a bundler. This is
-// the reason this project now has a build step (esbuild, see package.json) -
-// everything else in this file is still plain, dependency-free JS; `lit-html`
-// is used *only* for the handful of `column.template` callbacks below.
-//
-// Two follow-up rounds after the table landed: the overflow menu got
-// replaced with three plain ha-icon-buttons directly on the row (all three
-// actions visible, not tucked behind a "⋮"), and the list was widened to
-// fill the panel instead of being capped at max-width: 900px.
-//
-// Also new: a per-popup dialog width override. Free-text (not a size
-// preset), so either a px or % value works, saved into the popup's own
-// dashboard view config (a `nativepop_dialog_width` field alongside
-// `type: sections`) rather than a new metadata store. Applied in
-// openNativePopDialog - but only when isNarrow() is false. On narrow/mobile
-// viewports the override is deliberately left unset, so ha-dialog's own
-// (already viewport-safe) default takes over - mobile always gets full
-// width, regardless of what a popup's desktop width is set to.
-//
-// Both dialogs (the popup content dialog and the create/rename form) were
-// then switched from plain `ha-dialog` to `ha-adaptive-dialog` (added in HA
-// 2026.3) at Mikkel's request. It renders as a real `ha-dialog` on desktop
-// (>870px wide and >500px tall) and a real `ha-bottom-sheet` below that -
-// genuine touch/drag gesture handling (confirmed in ha-bottom-sheet's own
-// source: a gesture recognizer tracking touch position, closing on a
-// downward swipe), not a resized dialog pretending to be a sheet. In
-// dialog/desktop mode it composes an actual nested `<ha-dialog>` internally
-// and forwards `.width`/`.headerTitle`/etc. to it, so the existing
-// `--ha-dialog-width-md` override (per-popup dialog width) keeps working
-// completely unchanged.
-//
-// Reshuffled at the same time: the popup content dialog no longer defaults
-// to a "NativePop" header - blank unless a popup's own settings set one.
-// Create is now name-only (just enough to generate the slug); everything
-// else that used to live in "rename" - name, header, subheader, width, and
-// a free-form CSS variable override - moved into a single "Popup settings"
-// action (the row's ⚙ icon, previously the rename icon), since all of it is
-// "how this popup presents itself" rather than a creation-time decision.
+// The Popup Manager panel's list is a real `ha-data-table` (the same
+// component Settings > Dashboards uses), which needs `lit-html`'s `html`
+// tag for its column templates - a plain HTML string gets auto-escaped as
+// literal text by Lit's XSS protection, not parsed as markup. That's the
+// one place this project needs a build step (esbuild, see package.json);
+// everything else here is plain, dependency-free JS.
 import { html } from "lit-html";
 
 const POPUP_URL_PATH_PREFIX = "popup-";
 const POPUP_HASH_PREFIX = `#${POPUP_URL_PATH_PREFIX}`;
-const DEFAULT_POPUP_URL_PATH = "popup-test"; // fallback for the PoC card only
+const DEFAULT_POPUP_URL_PATH = "popup-test"; // fallback for the trigger example card only
 
 // Real MDI SVG path data (from @mdi/js / @mdi/svg), needed because
 // ha-icon-overflow-menu's `items[].path` field requires raw path data, not
@@ -258,46 +185,23 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   // waiting on the WS fetch below first — otherwise there's a silent delay
   // between tapping/navigating and anything appearing at all.
   //
-  // ha-adaptive-dialog (HA 2026.3+) instead of plain ha-dialog: renders as a
-  // real ha-dialog on desktop (>870px wide and >500px tall) and as a real
-  // swipeable ha-bottom-sheet below that - genuine touch/drag gesture
-  // handling, not a lookalike (verified in its source: a gesture recognizer
-  // tracking touch position, closing on a downward swipe). `allowModeChange`
-  // handles the edge case of rotating a tablet/phone while a popup is open.
+  // ha-adaptive-dialog renders as a real ha-dialog on desktop (wider than
+  // ~870px and taller than ~500px) and a real swipeable ha-bottom-sheet
+  // below that. `allowModeChange` handles rotating a tablet/phone while a
+  // popup is open. In desktop mode it composes an actual nested <ha-dialog>
+  // internally and forwards `.width`, so the --ha-dialog-width-md override
+  // below still applies normally.
   const dialog = document.createElement("ha-adaptive-dialog");
-  // No default title/subtitle - blank unless a popup's own settings (5.2)
-  // set one, applied once the config fetch below resolves.
+  // No default title/subtitle - blank unless a popup's own settings set
+  // one, applied once the config fetch below resolves.
   dialog.width = "medium";
   dialog.allowModeChange = true;
   dialog.open = true;
-  // ha-dialog's own ".body" padding (--dialog-content-padding, defaults to
-  // the shorthand "0 var(--ha-space-6) var(--ha-space-6) var(--ha-space-6)")
-  // is left alone deliberately - that ~24px is the dialog's normal chrome,
-  // consistent with every other HA dialog, not something to strip.
-  //
-  // hui-sections-view's own nested ".wrapper" padding (--column-gap, fed by
-  // --ha-view-sections-column-gap/--narrow-column-gap) is the one to strip -
-  // done below, once `view` exists, not here. Confirmed live (not just from
-  // source) that setting these two on `dialog` doesn't reach hui-sections-view
-  // - something shadow-DOM-deep between them (ha-adaptive-dialog's internal
-  // ha-dialog/ha-bottom-sheet split, most likely) redefines them first. hui-view
-  // has no shadow root of its own (renders straight into light DOM) and
-  // hui-sections-view is its direct light-DOM child, so setting them on
-  // `view` itself - which we create synchronously, before it's ever
-  // rendered - reaches it with no shadow boundary in the way and no
-  // wait/retry/flash-of-unstyled-content risk.
-  // In desktop/dialog mode this literally renders a nested <ha-dialog>
-  // internally (confirmed in ha-adaptive-dialog's own source) forwarding
-  // `.width`, so the same --ha-dialog-width-md override still works exactly
-  // as before - mwc-dialog's default width is cramped for a full dashboard
-  // view; widen it via the custom property ha-dialog reads for its
-  // "medium" width tier (see src/components/ha-dialog.ts). A per-popup
-  // custom width (from the create/rename dialog) can override this default
-  // once the config fetch below resolves - but only on desktop. On narrow
-  // viewports (now genuinely bottom-sheet mode, not just a narrower dialog)
-  // we deliberately leave this custom property untouched, so mobile always
-  // gets the full-width sheet, not whatever a desktop-oriented custom size
-  // happens to be.
+  // mwc-dialog's default width is cramped for a full dashboard view; widen
+  // it via the custom property ha-dialog reads for its "medium" width tier.
+  // A per-popup custom width can override this once the config fetch below
+  // resolves, but only on desktop - on narrow/bottom-sheet mode this is
+  // left untouched so mobile always gets the full-width sheet.
   if (!isNarrow()) {
     dialog.style.setProperty("--ha-dialog-width-md", "min(90vw, 1024px)");
   }
@@ -389,8 +293,8 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
 
   // Minimal but structurally correct `Lovelace` object — matches the shape
   // hui-view/hui-root expect (config, rawConfig, editMode, urlPath, mode,
-  // locale, plus the edit/save/toast callbacks). We're read-only for the
-  // PoC, so the mutating callbacks are no-ops.
+  // locale, plus the edit/save/toast callbacks). The popup is read-only, so
+  // the mutating callbacks are no-ops.
   const lovelace = {
     config: lovelaceConfig,
     rawConfig: lovelaceConfig,
@@ -410,31 +314,18 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   view.lovelace = lovelace;
   view.index = 0; // popup dashboards are single-view (spec 5.1)
   view.narrow = false;
-  // hui-sections-view's own :host rule (read live from its actual adopted
-  // stylesheet via DevTools, not from GitHub source, which turned out
-  // stale/incomplete) is:
-  //   :host {
-  //     --column-gap: var(--ha-view-sections-column-gap, 32px);
-  //     --narrow-column-gap: var(--ha-view-sections-narrow-column-gap, 8px);
-  //     ...
-  //   }
-  //   @media (width <= 600px) { :host { --column-gap: var(--narrow-column-gap); } }
-  // So --narrow-column-gap is ALSO locally redefined by :host, same as
-  // --column-gap itself - overriding it directly (what earlier attempts
-  // did) never had a chance. --ha-view-sections-narrow-column-gap is the
-  // real upstream source, matching the naming pattern of every other
-  // variable in that :host block. hui-view has no shadow root of its own
-  // and hui-sections-view is its direct light-DOM child, so setting both
-  // of these on `view` - which we create ourselves, synchronously, before
-  // it's ever rendered - reaches it with no shadow boundary and no
-  // wait/retry/flash-of-unstyled-content risk.
+  // hui-sections-view's own ":host" rule defines its nested ".wrapper" div's
+  // horizontal padding from --ha-view-sections-column-gap/
+  // --ha-view-sections-narrow-column-gap (32px/8px by default). hui-view has
+  // no shadow root of its own and hui-sections-view is its direct light-DOM
+  // child, so setting these on `view` - created synchronously, before it's
+  // ever rendered - reaches it with no shadow boundary and no flash of the
+  // padded state first.
   view.style.setProperty("--ha-view-sections-column-gap", "0");
   view.style.setProperty("--ha-view-sections-narrow-column-gap", "0");
-  // Popup custom CSS variables are applied to both `dialog` (chrome-level
-  // things like border-radius, header font size) and `view` (content-level
-  // things like the two above) - given the shadow-distance surprise just
-  // above, a variable meant for content wouldn't reliably reach it if only
-  // ever applied at the dialog level, same as our own defaults didn't.
+  // Applied to both `dialog` (chrome-level variables like border-radius,
+  // header font size) and `view` (content-level variables like the two
+  // above) so a custom override reaches whichever element actually reads it.
   applyCustomCssVariables(view, popupView.nativepop_css_variables);
 
   content.remove();
@@ -545,11 +436,11 @@ function slugify(text) {
 const POPUP_CREATE_SCHEMA = [{ name: "title", required: true, selector: { text: {} } }];
 
 // Popup settings: rename + how the popup's own dialog looks when it opens.
-// Free text throughout (not dropdowns/presets - Mikkel's call for width,
-// extended to header/subheader/CSS here for the same reason: arbitrary
-// values beat a fixed set of options). sanitizeDialogWidth() and
-// applyCustomCssVariables() are what actually validate/parse width and CSS
-// respectively - this form doesn't hard-gate on either being well-formed.
+// Free text throughout rather than dropdowns/presets, so arbitrary values
+// are always possible (e.g. any px/% width, not a fixed set of sizes).
+// sanitizeDialogWidth() and applyCustomCssVariables() validate/parse width
+// and CSS respectively - this form doesn't hard-gate on either being
+// well-formed.
 const POPUP_SETTINGS_SCHEMA = [
   { name: "title", required: true, selector: { text: {} } },
   { name: "header", required: false, selector: { text: {} } },
@@ -673,8 +564,8 @@ function showNativePopFormDialog(hass, { heading, data, schema, confirmLabel }) 
 // (ha-config-lovelace-dashboards.ts), which gets us sortable columns,
 // clickable rows, AND a built-in search box for free (search box appears
 // automatically once any column is `filterable`). Row actions are three
-// plain ha-icon-buttons rather than the native page's overflow menu -
-// Mikkel wants all three visible on the row at once, not tucked behind a "⋮".
+// plain ha-icon-buttons, all visible on the row at once, rather than the
+// native page's overflow ("⋮") menu.
 //
 // The "+ New popup" button is a plain positioned <ha-button size="l">, not a
 // real FAB - HA itself removed the ha-fab component as of 2026.5 ("we use
@@ -755,13 +646,12 @@ class NativePopPanel extends HTMLElement {
         // headroom instead of an exact-fit cap.
         minWidth: "168px",
         showNarrow: true,
-        // Three plain ha-icon-buttons instead of an overflow menu - Mikkel
-        // wants all three actions visible on the row, not collapsed behind
-        // a "⋮". Using .path= directly (real SVG data, see ICON_PATHS) now
-        // that real Lit templates are available, rather than the
-        // slotted-<ha-icon> fallback used before the build step existed.
-        // "Rename" is now "Settings" (cog icon) - repurposed to cover
-        // rename + how the popup's dialog looks when it opens (5.2).
+        // Three plain ha-icon-buttons, all visible on the row at once,
+        // instead of an overflow menu. Uses .path= directly (real SVG data,
+        // see ICON_PATHS) now that real Lit templates are available, rather
+        // than the slotted-<ha-icon> fallback used before the build step
+        // existed. "Settings" (cog icon) covers rename + how the popup's
+        // dialog looks when it opens.
         template: (popup) => html`
           <div style="display: flex; width: 100%; justify-content: flex-end;">
             <ha-icon-button
@@ -1114,12 +1004,12 @@ class NativePopPanel extends HTMLElement {
 
 customElements.define("nativepop-panel", NativePopPanel);
 
-// Test harness card: configurable `popup:` slug, one button per trigger
-// path, each going through the SAME generic mechanism a plain native card
-// would use (dispatching ll-custom / setting location.hash) rather than
-// calling the internal functions directly — so this also validates the
-// listeners above, not just the dialog mount itself.
-class NativePopPocCard extends HTMLElement {
+// Example card: a configurable `popup:` slug with one button per tap
+// trigger path, each going through the same generic mechanism any card's
+// tap_action would use (dispatching ll-custom / setting location.hash)
+// rather than calling the internal functions directly. Handy for quickly
+// testing a popup without wiring up tap_action YAML on an existing card.
+class NativePopTriggerExampleCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
     this._popup = this._config.popup || DEFAULT_POPUP_URL_PATH;
@@ -1136,7 +1026,7 @@ class NativePopPocCard extends HTMLElement {
     this._rendered = true;
 
     this.innerHTML = `
-      <ha-card header="NativePop PoC">
+      <ha-card header="NativePop Trigger Example">
         <div style="padding: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
           <mwc-button raised id="direct-btn">Open popup (direct)</mwc-button>
           <mwc-button raised id="hash-btn">Open popup (navigate hash)</mwc-button>
@@ -1165,13 +1055,13 @@ class NativePopPocCard extends HTMLElement {
   }
 }
 
-customElements.define("nativepop-poc-card", NativePopPocCard);
+customElements.define("nativepop-trigger-example", NativePopTriggerExampleCard);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: "nativepop-poc-card",
-  name: "NativePop PoC",
-  description: "Proof-of-concept test harness trigger for NativePop popups.",
+  type: "nativepop-trigger-example",
+  name: "NativePop Trigger Example",
+  description: "Example card demonstrating NativePop's direct and hash-navigation triggers.",
 });
 
-console.info("NativePop: milestone 5 loaded (panel now uses ha-data-table: sortable columns, search, overflow menu)");
+console.info("NativePop loaded");

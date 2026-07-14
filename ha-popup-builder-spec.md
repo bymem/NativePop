@@ -398,7 +398,7 @@ menu rather than hand-rolled equivalents.
 | Dialog sizing/responsiveness of a full view in a modal | Sections view assumes a full-page context | *(Improved, milestone 5)* Desktop: widened default + per-popup override (5.3). Mobile: `ha-adaptive-dialog` gives a real bottom-sheet with swipe-to-close instead of a resized dialog. Still untested on the actual companion app (see next row) |
 | Hash trigger conflicts | Other cards/integrations may also use URL hashes (e.g. anchor links, other custom cards) | Namespace the hash pattern clearly (`#popup-...`) to avoid collisions |
 | Hidden dashboards showing up unexpectedly (search, quick-bar, voice) | `show_in_sidebar: false` hides nav but may not hide from all HA surfaces | Verify behavior across HA search/quick-bar; document known limitations |
-| Storage dashboard count at scale | Many popups = many dashboards in `.storage/lovelace.*` | Acceptable for personal use scale; not a concern at Mikkel's scope |
+| Storage dashboard count at scale | Many popups = many dashboards in `.storage/lovelace.*` | Acceptable at personal/small-install scale; revisit if usage grows significantly |
 | Companion app (iOS) parity | Custom elements/dialogs, and hash-based navigation, sometimes behave differently in the app's webview | Test explicitly on iOS companion app, not just desktop browser |
 | Automation-triggered popups have no targeting | `nativepop_open_popup` events broadcast to every connected frontend session, not a specific browser/user | Document as a known v1 limitation; per-target delivery needs the integration to track registered browsers/sessions (à la `browser_mod`) — real work, deferred to v2 (see 5.5, 8) |
 | Companion integration adds a small Python backend | Contradicts the original 5.6 decision to avoid a backend for v1 | Accepted trade-off at milestone 4 (see 5.7) — the pattern was already proven in a sibling project, and it removes a manual YAML step plus an unverified resource-load-timing assumption |
@@ -428,7 +428,7 @@ menu rather than hand-rolled equivalents.
    loading state while config fetches (dialog opens immediately with a
    spinner, swaps in `hui-view` once the WS fetch resolves, shows an inline
    error instead of `alert()` on failure). Also restyled the Popup Manager
-   panel to feel more native (unscoped, added at Mikkel's request): a real
+   panel to feel more native (unscoped addition): a real
    toolbar dispatching the same `hass-toggle-menu` event `ha-menu-button`
    uses, a bottom-right positioned "+ New popup" button (matching Settings >
    Dashboards' FAB placement — HA itself dropped the actual `ha-fab`
@@ -462,17 +462,17 @@ menu rather than hand-rolled equivalents.
      `confirm()` — a destructive-action confirmation reads differently from
      "the creation interface," and was out of scope for this pass.
    - The list itself: even after the row-markup fix above, it was still
-     hand-rolled divs, not the real "Manage dashboards" list Mikkel kept
-     pointing back to. Replaced with an actual `ha-data-table` (see 5.2,
-     5.8) — which also directly delivered the requested search feature, and
-     forced the project's build-step reversal since the table's icon/action
-     columns need real Lit templates. First pass used the native page's
-     overflow ("⋮") menu for row actions too; feedback was that three
-     actions behind one menu wasn't wanted here, so it's three plain
+     hand-rolled divs, not the real "Manage dashboards" list this was meant to
+     mirror. Replaced with an actual `ha-data-table` (see 5.2, 5.8) — which
+     also directly delivered the requested search feature, and forced the
+     project's build-step reversal since the table's icon/action columns
+     need real Lit templates. First pass used the native page's overflow
+     ("⋮") menu for row actions too; the decision was that three actions
+     behind one menu was more clicks than wanted here, so it's three plain
      `ha-icon-button`s on the row instead — the one place this panel
      deliberately doesn't mirror the reference file's exact layout.
    - Per-popup dialog width (5.2/5.3): a free-text override, not the size-preset
-     dropdown originally floated in milestone 6's backlog — Mikkel wanted the
+     dropdown originally floated in milestone 6's backlog — chosen for the
      flexibility of an arbitrary px/% value over a fixed set of options.
    - Dialog component: switched both dialogs from `ha-dialog` to
      `ha-adaptive-dialog` (5.3) for real swipe-to-close on mobile — a genuine
@@ -481,8 +481,8 @@ menu rather than hand-rolled equivalents.
      testing is still outstanding (see below).
    - Reshuffle: no default dialog title (was hardcoded "NativePop"), create
      narrowed to name-only, and "Rename" grew into a single "Popup settings"
-     action (5.2) covering rename + header/subheader/width/custom-CSS —
-     Mikkel's call that all of these are "how a popup presents itself," not
+     action (5.2) covering rename + header/subheader/width/custom-CSS, on
+     the basis that all of these are "how a popup presents itself," not
      creation-time decisions, and belong together rather than split across
      create and a plain rename.
 
