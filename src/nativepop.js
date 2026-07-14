@@ -270,21 +270,19 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   dialog.width = "medium";
   dialog.allowModeChange = true;
   dialog.open = true;
-  // ha-dialog's own content area (".body") has default padding
-  // (--dialog-content-padding, defaults to the shorthand
-  // "0 var(--ha-space-6) var(--ha-space-6) var(--ha-space-6)" - see
-  // src/components/ha-dialog.ts) meant for generic dialog content. Zero it
-  // out unconditionally (not a per-popup setting - this is a layout fix,
-  // not a customization).
-  dialog.style.setProperty("--dialog-content-padding", "0");
-  // Separately: hui-sections-view has its OWN horizontal padding on its
-  // ".wrapper" div - `padding: 0 var(--column-gap)`, where --column-gap
-  // defaults to 8px on narrow viewports / 32px on desktop (see
-  // src/panels/lovelace/views/hui-sections-view.ts). This is what actually
-  // insets popup content from the dialog's edges (--dialog-content-padding
-  // above is a real, separate padding source, but wasn't the one making
-  // content look misaligned). Zeroed the same way - unconditional default,
-  // overridable per popup via the custom CSS variables field if wanted.
+  // ha-dialog's own ".body" padding (--dialog-content-padding, defaults to
+  // the shorthand "0 var(--ha-space-6) var(--ha-space-6) var(--ha-space-6)")
+  // is left alone deliberately - that ~24px is the dialog's normal chrome,
+  // consistent with every other HA dialog, not something to strip.
+  //
+  // What actually needed zeroing is one level further in: hui-sections-view
+  // has its OWN horizontal padding on its ".wrapper" div - `padding: 0
+  // var(--column-gap)`, where --column-gap defaults to 8px on narrow
+  // viewports / 32px on desktop (see
+  // src/panels/lovelace/views/hui-sections-view.ts). That's the nested,
+  // redundant padding stacking on top of the dialog's own - the one to
+  // remove. Zeroed unconditionally (not a per-popup setting), overridable
+  // per popup via the custom CSS variables field if wanted.
   dialog.style.setProperty("--column-gap", "0");
   // In desktop/dialog mode this literally renders a nested <ha-dialog>
   // internally (confirmed in ha-adaptive-dialog's own source) forwarding

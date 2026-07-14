@@ -155,20 +155,20 @@ custom CSS variables) apply regardless of `isNarrow()` — only the *width* over
 is desktop-only by design; header text and arbitrary CSS variables aren't inherently
 a desktop-vs-mobile concern the way a fixed pixel width is.
 
-**Content padding** *(done, milestone 5)*: two separate horizontal-padding sources
-were insetting popup content from the dialog edges, both zeroed unconditionally
-(not a per-popup setting) and both applied before the popup's own custom CSS
-variables (5.2), so either can still be explicitly reintroduced per popup via that
-field if wanted:
-- `--dialog-content-padding` — `ha-dialog`'s own `.body` padding, defaults to the
-  shorthand `0 var(--ha-space-6) var(--ha-space-6) var(--ha-space-6)`.
-- `--column-gap` — `hui-sections-view`'s own `.wrapper` div padding (`0
-  var(--column-gap)`), defaults to 8px narrow / 32px desktop. This turned out to be
-  the actual cause of the reported misalignment — the first fix
-  (`--dialog-content-padding` alone) was real and independently correct, but wasn't
-  what was actually visible; found by reading `hui-sections-view.ts`'s source after
-  the first guess didn't match what was reported (an 8px measurement, which doesn't
-  match `--ha-space-6`).
+**Content padding** *(done, milestone 5, two-round fix)*: popup content was sitting
+double-inset from the dialog's edge — two nested padding sources stacking on each
+other. First round zeroed `--dialog-content-padding` (`ha-dialog`'s own `.body`
+padding, defaults to the shorthand `0 var(--ha-space-6) var(--ha-space-6)
+var(--ha-space-6)`), which was real but turned out to be the wrong layer — the
+reported measurement (8px) didn't match `--ha-space-6`, and zeroing *both* layers
+over-corrected (content ended up flush with no margin at all, reported as "moved
+too far out"). Second round: reverted the `--dialog-content-padding` zero
+(that ~24px is the dialog's normal chrome, same as any other HA dialog, meant to
+stay), and instead zeroed only `--column-gap` — `hui-sections-view`'s own
+`.wrapper` div padding (`0 var(--column-gap)`, defaults to 8px narrow / 32px
+desktop), the nested, redundant gutter actually causing the double-inset. Applied
+before the popup's own custom CSS variables (5.2), so either can still be
+explicitly reintroduced per popup via that field if wanted.
 
 **Dialog component** *(done, milestone 5)*: both the popup content dialog and the
 create/rename form dialog use `ha-adaptive-dialog` (added HA 2026.3), not plain

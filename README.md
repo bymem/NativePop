@@ -38,8 +38,8 @@ that popup's dialog (`ha-adaptive-dialog`/`ha-dialog`). Verified against
 | `--ha-dialog-min-height` | *(none)* | Forces a minimum height |
 | `--ha-dialog-border-radius` | `var(--ha-border-radius-3xl)` | Corner rounding |
 | `--ha-dialog-surface-background` | `var(--card-background-color, --ha-color-surface-default)` | Dialog background |
-| `--dialog-content-padding` | **`0`** (ha-dialog's own default is the shorthand `0 var(--ha-space-6) var(--ha-space-6) var(--ha-space-6)` — see below) | Padding around the dialog's `.body` content area |
-| `--column-gap` | **`0`** (`hui-sections-view`'s own default: 8px narrow / 32px desktop — see below) | Horizontal padding on the sections view's own `.wrapper` div — this is what actually inset popup content from the dialog edges |
+| `--dialog-content-padding` | `0 var(--ha-space-6) var(--ha-space-6) var(--ha-space-6)` (untouched — the dialog's normal chrome, same as any other HA dialog) | Padding around the dialog's `.body` content area |
+| `--column-gap` | **`0`** (`hui-sections-view`'s own default: 8px narrow / 32px desktop — see below) | Horizontal padding on the sections view's own `.wrapper` div — this was the *nested, redundant* padding stacking on top of the dialog's own; the one actually worth removing |
 | `--dialog-surface-margin-top` | `auto` | Vertical position within the viewport |
 | `--ha-dialog-header-title-color` | `var(--primary-text-color)` | Header title text color |
 | `--ha-dialog-header-title-font-size` | `var(--ha-font-size-2xl)` | Header title text size |
@@ -54,13 +54,13 @@ applied afterward and silently win over that field instead of erroring.
 Header/subheader text itself isn't a CSS variable — set those via the
 "Popup header"/"Popup subheader" fields in the same settings dialog.
 
-`--dialog-content-padding` and `--column-gap` are both zeroed out
-unconditionally (every popup, not a per-popup setting) so popup content
-aligns flush edge-to-edge instead of looking inset — the two are separate
-padding sources (dialog chrome vs. the sections view's own grid gutter), and
-both needed zeroing to actually remove all of it. You can still put a value
-for either in the CSS box above if you specifically want padding back for
-one popup — the box is applied after our defaults, so it wins.
+Only `--column-gap` is zeroed by default (unconditionally, every popup, not
+a per-popup setting) — `--dialog-content-padding` is left at its normal
+value on purpose, so popup content sits with the same breathing room from
+the dialog's edge as any other HA dialog, just without the extra nested
+gutter `hui-sections-view` would otherwise add on top of that. You can still
+put a value for either in the CSS box above if you want to adjust one for a
+specific popup — the box is applied after our default, so it wins.
 
 ## Status: Milestone 5 (polish)
 
@@ -115,12 +115,12 @@ variables" below).
   shows an inline error if the fetch fails, instead of a jarring `alert()`).
 - The dialog is now noticeably wider (`min(90vw, 1024px)`) instead of
   mwc-dialog's cramped default.
-- Removed two separate sources of horizontal padding that were insetting
-  popup content from the dialog's edges: `--dialog-content-padding` (the
-  dialog's own generic content padding) and, after that alone turned out not
-  to be the actual culprit, `--column-gap` (`hui-sections-view`'s own grid
-  gutter, defaulting to 8px on narrow / 32px on desktop). Both zeroed
-  unconditionally — see "Popup dialog CSS variables" above.
+- Removed `hui-sections-view`'s own nested grid gutter (`--column-gap`,
+  defaulting to 8px narrow / 32px desktop) — it was stacking on top of the
+  dialog's own normal content padding (`--dialog-content-padding`, left
+  alone on purpose), so popup content ended up double-inset from the
+  dialog's edge instead of sitting at a normal, single margin. See "Popup
+  dialog CSS variables" above.
 - Close-on-outside-click turned out to already work by default (`ha-dialog`'s
   own behavior) — verified, no code needed.
 - The Popup Manager panel's list went through a few revisions before landing
