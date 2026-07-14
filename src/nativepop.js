@@ -270,6 +270,16 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   dialog.width = "medium";
   dialog.allowModeChange = true;
   dialog.open = true;
+  // ha-dialog's own content area has default horizontal padding
+  // (--dialog-content-padding, defaults to var(--ha-space-6) - see
+  // src/components/ha-dialog.ts) meant for generic dialog content. Our
+  // content is a real dashboard view, which already manages its own
+  // spacing/padding exactly as it would rendered full-page outside a
+  // dialog - the dialog's own padding on top of that just makes it look
+  // inset/misaligned compared to the rest of the popup's content. Zero it
+  // out unconditionally (not a per-popup setting - this is a layout fix,
+  // not a customization).
+  dialog.style.setProperty("--dialog-content-padding", "0");
   // In desktop/dialog mode this literally renders a nested <ha-dialog>
   // internally (confirmed in ha-adaptive-dialog's own source) forwarding
   // `.width`, so the same --ha-dialog-width-md override still works exactly

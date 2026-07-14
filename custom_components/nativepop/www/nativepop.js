@@ -332,6 +332,7 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   dialog.width = "medium";
   dialog.allowModeChange = true;
   dialog.open = true;
+  dialog.style.setProperty("--dialog-content-padding", "0");
   if (!isNarrow()) {
     dialog.style.setProperty("--ha-dialog-width-md", "min(90vw, 1024px)");
   }

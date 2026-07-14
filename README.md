@@ -38,7 +38,7 @@ that popup's dialog (`ha-adaptive-dialog`/`ha-dialog`). Verified against
 | `--ha-dialog-min-height` | *(none)* | Forces a minimum height |
 | `--ha-dialog-border-radius` | `var(--ha-border-radius-3xl)` | Corner rounding |
 | `--ha-dialog-surface-background` | `var(--card-background-color, --ha-color-surface-default)` | Dialog background |
-| `--dialog-content-padding` | `var(--ha-space-6)` | Inner padding around content |
+| `--dialog-content-padding` | **`0`** (we override ha-dialog's own `var(--ha-space-6)` default — see below) | Inner padding around content |
 | `--dialog-surface-margin-top` | `auto` | Vertical position within the viewport |
 | `--ha-dialog-header-title-color` | `var(--primary-text-color)` | Header title text color |
 | `--ha-dialog-header-title-font-size` | `var(--ha-font-size-2xl)` | Header title text size |
@@ -52,6 +52,12 @@ applied afterward and silently win over that field instead of erroring.
 
 Header/subheader text itself isn't a CSS variable — set those via the
 "Popup header"/"Popup subheader" fields in the same settings dialog.
+
+`--dialog-content-padding` is zeroed out unconditionally (every popup, not a
+per-popup setting) so popup content aligns flush like the rest of a
+dashboard instead of looking inset. You can still put a value for it in the
+CSS box above if you specifically want padding back for one popup — the box
+is applied after our default, so it wins.
 
 ## Status: Milestone 5 (polish)
 
@@ -106,6 +112,11 @@ variables" below).
   shows an inline error if the fetch fails, instead of a jarring `alert()`).
 - The dialog is now noticeably wider (`min(90vw, 1024px)`) instead of
   mwc-dialog's cramped default.
+- Removed the dialog's own default content padding (`--dialog-content-padding`,
+  normally there for generic dialog content) — our content is a real
+  dashboard view that already manages its own spacing exactly as it would
+  full-page, so the dialog's padding on top of that just made it look
+  inset/misaligned. Zeroed unconditionally, not a per-popup setting.
 - Close-on-outside-click turned out to already work by default (`ha-dialog`'s
   own behavior) — verified, no code needed.
 - The Popup Manager panel's list went through a few revisions before landing

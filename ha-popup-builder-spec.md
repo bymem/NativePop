@@ -155,6 +155,15 @@ custom CSS variables) apply regardless of `isNarrow()` — only the *width* over
 is desktop-only by design; header text and arbitrary CSS variables aren't inherently
 a desktop-vs-mobile concern the way a fixed pixel width is.
 
+**Content padding** *(done, milestone 5)*: `--dialog-content-padding` (defaults to
+`var(--ha-space-6)` in `ha-dialog`'s own source) is zeroed unconditionally on every
+popup dialog, not left as a per-popup setting. The mounted content is a real
+dashboard view that already manages its own spacing exactly as it would rendered
+full-page outside a dialog; the dialog's own content padding on top of that made
+popup content look inset compared to viewing the same dashboard directly. Applied
+before the popup's own custom CSS variables (5.2), so a popup can still explicitly
+reintroduce padding for itself via that field if wanted.
+
 **Dialog component** *(done, milestone 5)*: both the popup content dialog and the
 create/rename form dialog use `ha-adaptive-dialog` (added HA 2026.3), not plain
 `ha-dialog` — a real `ha-dialog` on desktop (>870px wide and >500px tall, per its
