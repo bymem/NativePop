@@ -317,8 +317,10 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
     console.error("NativePop: no hass object available yet");
     return;
   }
-  const dialog = document.createElement("ha-dialog");
-  dialog.heading = "NativePop";
+  const dialog = document.createElement("ha-adaptive-dialog");
+  dialog.headerTitle = "NativePop";
+  dialog.width = "medium";
+  dialog.allowModeChange = true;
   dialog.open = true;
   if (!isNarrow()) {
     dialog.style.setProperty("--ha-dialog-width-md", "min(90vw, 1024px)");
@@ -488,7 +490,7 @@ function computePopupFormLabel(schema) {
 }
 function computePopupFormHelper(schema) {
   if (schema.name === "width") {
-    return 'e.g. "800px" or "70%" - leave blank for the default. Narrow/mobile screens always open full width, regardless of this setting.';
+    return 'e.g. "800px" or "70%" - leave blank for the default. Narrow/mobile screens always open as a full-width swipeable sheet instead, regardless of this setting.';
   }
   return "";
 }
@@ -496,8 +498,10 @@ function showNativePopFormDialog(hass, { heading, data, confirmLabel }) {
   return new Promise((resolve) => {
     let currentData = { ...data };
     let resolved = false;
-    const dialog = document.createElement("ha-dialog");
-    dialog.heading = heading;
+    const dialog = document.createElement("ha-adaptive-dialog");
+    dialog.headerTitle = heading;
+    dialog.width = "small";
+    dialog.allowModeChange = true;
     dialog.open = true;
     const form = document.createElement("ha-form");
     form.hass = hass;

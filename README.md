@@ -94,6 +94,12 @@ every trigger (hash, fire-dom-event, automation) is wired to it.
   mobile screens always get the full-width dialog regardless of this
   setting (the field's helper text says so). Leave it blank for the
   existing default (`min(90vw, 1024px)`).
+- **Both dialogs now swipe-to-close on mobile.** Switched from plain
+  `ha-dialog` to `ha-adaptive-dialog` (added in HA 2026.3): a real desktop
+  dialog above ~870px/500px, and a real swipeable bottom sheet below that —
+  genuine drag-to-dismiss, not a resized dialog. Desktop mode still
+  literally renders a nested `ha-dialog` internally, so the per-popup width
+  override above keeps working unchanged.
 - "+ New popup" moved out of the toolbar to a fixed bottom-right button,
   matching where Settings > Dashboards puts its "Add dashboard" action (a
   FAB in the native page). HA itself removed the dedicated `ha-fab` component
@@ -244,3 +250,9 @@ just HA storage dashboards, untouched by any of this.
     narrow window (or the companion app/phone) — it should be full width
     regardless of the saved value. Clear the field back to blank and confirm
     it returns to the normal default width.
+15. **Swipe-to-close (mobile/narrow only)** — on a phone, the companion app,
+    or a narrow-enough browser window, open a popup and drag it down from
+    the top — it should follow your finger and close on release, the same
+    as HA's own native mobile dialogs. Try it on the create/rename dialog
+    too. On desktop, confirm both dialogs still look and behave like normal
+    dialogs (this only changes the mobile/narrow presentation).

@@ -100,6 +100,18 @@
 // viewports the override is deliberately left unset, so ha-dialog's own
 // (already viewport-safe) default takes over - mobile always gets full
 // width, regardless of what a popup's desktop width is set to.
+//
+// Both dialogs (the popup content dialog and the create/rename form) were
+// then switched from plain `ha-dialog` to `ha-adaptive-dialog` (added in HA
+// 2026.3) at Mikkel's request. It renders as a real `ha-dialog` on desktop
+// (>870px wide and >500px tall) and a real `ha-bottom-sheet` below that -
+// genuine touch/drag gesture handling (confirmed in ha-bottom-sheet's own
+// source: a gesture recognizer tracking touch position, closing on a
+// downward swipe), not a resized dialog pretending to be a sheet. In
+// dialog/desktop mode it composes an actual nested `<ha-dialog>` internally
+// and forwards `.width`/`.headerTitle`/etc. to it, so the existing
+// `--ha-dialog-width-md` override (per-popup dialog width) keeps working
+// completely unchanged.
 import { html } from "lit-html";
 
 const POPUP_URL_PATH_PREFIX = "popup-";
@@ -219,18 +231,30 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   // Open the dialog shell immediately with a loading state, rather than
   // waiting on the WS fetch below first — otherwise there's a silent delay
   // between tapping/navigating and anything appearing at all.
-  const dialog = document.createElement("ha-dialog");
-  dialog.heading = "NativePop";
+  //
+  // ha-adaptive-dialog (HA 2026.3+) instead of plain ha-dialog: renders as a
+  // real ha-dialog on desktop (>870px wide and >500px tall) and as a real
+  // swipeable ha-bottom-sheet below that - genuine touch/drag gesture
+  // handling, not a lookalike (verified in its source: a gesture recognizer
+  // tracking touch position, closing on a downward swipe). `allowModeChange`
+  // handles the edge case of rotating a tablet/phone while a popup is open.
+  const dialog = document.createElement("ha-adaptive-dialog");
+  dialog.headerTitle = "NativePop";
+  dialog.width = "medium";
+  dialog.allowModeChange = true;
   dialog.open = true;
-  // mwc-dialog's default width is cramped for a full dashboard view; widen
-  // it via the custom property ha-dialog actually reads for its default
-  // ("medium") width tier (see src/components/ha-dialog.ts). A per-popup
+  // In desktop/dialog mode this literally renders a nested <ha-dialog>
+  // internally (confirmed in ha-adaptive-dialog's own source) forwarding
+  // `.width`, so the same --ha-dialog-width-md override still works exactly
+  // as before - mwc-dialog's default width is cramped for a full dashboard
+  // view; widen it via the custom property ha-dialog reads for its
+  // "medium" width tier (see src/components/ha-dialog.ts). A per-popup
   // custom width (from the create/rename dialog) can override this default
   // once the config fetch below resolves - but only on desktop. On narrow
-  // viewports we deliberately leave this custom property untouched, so
-  // ha-dialog's own default (already viewport-safe) behavior applies -
-  // mobile should always be full width, not whatever a desktop-oriented
-  // custom size happens to be.
+  // viewports (now genuinely bottom-sheet mode, not just a narrower dialog)
+  // we deliberately leave this custom property untouched, so mobile always
+  // gets the full-width sheet, not whatever a desktop-oriented custom size
+  // happens to be.
   if (!isNarrow()) {
     dialog.style.setProperty("--ha-dialog-width-md", "min(90vw, 1024px)");
   }
@@ -245,9 +269,9 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   dialogOpenedViaHash = viaHash;
   dialogPushedByUs = pushedByUs;
 
-  // ha-dialog (mwc-dialog) fires "closed" on any close path (X, ESC, outside
-  // click — which is already the default here since we never set
-  // preventScrimClose — or us setting .open = false).
+  // ha-adaptive-dialog fires "closed" on any close path (X, ESC, outside
+  // click - already the default since we never set preventScrimClose -
+  // swipe-down on mobile, or us setting .open = false).
   dialog.addEventListener("closed", () => {
     dialog.remove();
     currentDialog = null;
@@ -457,7 +481,7 @@ function computePopupFormLabel(schema) {
 
 function computePopupFormHelper(schema) {
   if (schema.name === "width") {
-    return 'e.g. "800px" or "70%" - leave blank for the default. Narrow/mobile screens always open full width, regardless of this setting.';
+    return 'e.g. "800px" or "70%" - leave blank for the default. Narrow/mobile screens always open as a full-width swipeable sheet instead, regardless of this setting.';
   }
   return "";
 }
@@ -465,18 +489,22 @@ function computePopupFormHelper(schema) {
 // Real dialog for entering a popup's name + dialog width (create/rename),
 // matching HA's own dashboard create/edit dialog
 // (dialog-lovelace-dashboard-detail.ts) instead of a browser prompt():
-// ha-dialog + ha-form (schema-driven, so it renders through the same field
-// components any native settings form uses) + ha-dialog-footer with
-// primary/secondary ha-button actions. Resolves to {title, width} (width
-// raw/untrimmed - sanitizeDialogWidth() at the call site decides if it's
-// usable), or null if cancelled.
+// ha-adaptive-dialog (see openNativePopDialog for why - real desktop
+// dialog/mobile bottom-sheet, with genuine swipe-to-close, not just a
+// resized ha-dialog) + ha-form (schema-driven, so it renders through the
+// same field components any native settings form uses) + ha-dialog-footer
+// with primary/secondary ha-button actions. Resolves to {title, width}
+// (width raw/untrimmed - sanitizeDialogWidth() at the call site decides if
+// it's usable), or null if cancelled.
 function showNativePopFormDialog(hass, { heading, data, confirmLabel }) {
   return new Promise((resolve) => {
     let currentData = { ...data };
     let resolved = false;
 
-    const dialog = document.createElement("ha-dialog");
-    dialog.heading = heading;
+    const dialog = document.createElement("ha-adaptive-dialog");
+    dialog.headerTitle = heading;
+    dialog.width = "small";
+    dialog.allowModeChange = true;
     dialog.open = true;
 
     const form = document.createElement("ha-form");

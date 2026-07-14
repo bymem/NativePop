@@ -133,6 +133,16 @@ entirely, so `ha-dialog`'s own default (already viewport-safe) behavior governs 
 deliberately not reimplemented ourselves, to avoid the risk of guessing HA's
 internal breakpoint wrong.
 
+**Dialog component** *(done, milestone 5)*: both the popup content dialog and the
+create/rename form dialog use `ha-adaptive-dialog` (added HA 2026.3), not plain
+`ha-dialog` — a real `ha-dialog` on desktop (>870px wide and >500px tall, per its
+source — confirms the same breakpoint `isNarrow()` above is built on) and a real
+`ha-bottom-sheet` below that, with genuine swipe-to-close (a gesture recognizer
+tracking touch position, closing on a downward swipe — verified in
+`ha-bottom-sheet`'s own source, not assumed). In desktop mode it composes an actual
+nested `<ha-dialog>` internally and forwards `.width`/`.headerTitle`/etc., so the
+per-popup width override above needed no changes to keep working.
+
 ### 5.4 Trigger paths (both call into 5.3)
 
 - **Navigation trigger (primary)**: a global `hashchange`/`popstate`/`location-changed`
@@ -300,7 +310,7 @@ menu rather than hand-rolled equivalents.
 | Risk | Notes | Mitigation |
 |---|---|---|
 | `hui-view` is undocumented/internal | Behavior/shape may change across HA releases | Keep the mount wrapper thin and isolated; pin tested HA versions; monitor changelogs |
-| Dialog sizing/responsiveness of a full view in a modal | Sections view assumes a full-page context | May need CSS overrides; test on mobile companion app and desktop |
+| Dialog sizing/responsiveness of a full view in a modal | Sections view assumes a full-page context | *(Improved, milestone 5)* Desktop: widened default + per-popup override (5.3). Mobile: `ha-adaptive-dialog` gives a real bottom-sheet with swipe-to-close instead of a resized dialog. Still untested on the actual companion app (see next row) |
 | Hash trigger conflicts | Other cards/integrations may also use URL hashes (e.g. anchor links, other custom cards) | Namespace the hash pattern clearly (`#popup-...`) to avoid collisions |
 | Hidden dashboards showing up unexpectedly (search, quick-bar, voice) | `show_in_sidebar: false` hides nav but may not hide from all HA surfaces | Verify behavior across HA search/quick-bar; document known limitations |
 | Storage dashboard count at scale | Many popups = many dashboards in `.storage/lovelace.*` | Acceptable for personal use scale; not a concern at Mikkel's scope |
@@ -379,6 +389,11 @@ menu rather than hand-rolled equivalents.
    - Per-popup dialog width (5.2/5.3): a free-text override, not the size-preset
      dropdown originally floated in milestone 6's backlog — Mikkel wanted the
      flexibility of an arbitrary px/% value over a fixed set of options.
+   - Dialog component: switched both dialogs from `ha-dialog` to
+     `ha-adaptive-dialog` (5.3) for real swipe-to-close on mobile — a genuine
+     bottom-sheet with touch/drag handling, not a resized dialog. Directly
+     improves the mobile-behavior risk row in §7, though real companion-app
+     testing is still outstanding (see below).
 
    Mobile-specific behavior (companion app testing) still outstanding — no
    way to verify without a physical device.
