@@ -155,14 +155,20 @@ custom CSS variables) apply regardless of `isNarrow()` — only the *width* over
 is desktop-only by design; header text and arbitrary CSS variables aren't inherently
 a desktop-vs-mobile concern the way a fixed pixel width is.
 
-**Content padding** *(done, milestone 5)*: `--dialog-content-padding` (defaults to
-`var(--ha-space-6)` in `ha-dialog`'s own source) is zeroed unconditionally on every
-popup dialog, not left as a per-popup setting. The mounted content is a real
-dashboard view that already manages its own spacing exactly as it would rendered
-full-page outside a dialog; the dialog's own content padding on top of that made
-popup content look inset compared to viewing the same dashboard directly. Applied
-before the popup's own custom CSS variables (5.2), so a popup can still explicitly
-reintroduce padding for itself via that field if wanted.
+**Content padding** *(done, milestone 5)*: two separate horizontal-padding sources
+were insetting popup content from the dialog edges, both zeroed unconditionally
+(not a per-popup setting) and both applied before the popup's own custom CSS
+variables (5.2), so either can still be explicitly reintroduced per popup via that
+field if wanted:
+- `--dialog-content-padding` — `ha-dialog`'s own `.body` padding, defaults to the
+  shorthand `0 var(--ha-space-6) var(--ha-space-6) var(--ha-space-6)`.
+- `--column-gap` — `hui-sections-view`'s own `.wrapper` div padding (`0
+  var(--column-gap)`), defaults to 8px narrow / 32px desktop. This turned out to be
+  the actual cause of the reported misalignment — the first fix
+  (`--dialog-content-padding` alone) was real and independently correct, but wasn't
+  what was actually visible; found by reading `hui-sections-view.ts`'s source after
+  the first guess didn't match what was reported (an 8px measurement, which doesn't
+  match `--ha-space-6`).
 
 **Dialog component** *(done, milestone 5)*: both the popup content dialog and the
 create/rename form dialog use `ha-adaptive-dialog` (added HA 2026.3), not plain
