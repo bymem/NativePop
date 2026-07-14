@@ -84,26 +84,40 @@ entry — providing:
   not an approximation. Gets sortable columns, clickable rows (opens edit mode), and
   a built-in search box (automatic once a column is `filterable` — no custom search
   code needed, satisfying the "add search" ask directly) for free. This is what
-  forced the build-step reversal in 5.8. Row actions (Rename/Edit/Delete) render as
+  forced the build-step reversal in 5.8. Row actions (Settings/Edit/Delete) render as
   three plain `ha-icon-button`s directly on the row, not the native page's overflow
   ("⋮") menu — tried that first since it's what the reference file uses, but three
   actions behind one menu was judged more clicks than wanted for a list this size.
-- Create new popup (prompts for name → creates hidden dashboard, opens it in edit mode).
-- Rename / delete popup. Rename changes the `title` only (via `lovelace/dashboards/update`)
-  — the `url_path`/slug stays fixed, since triggers (hash, fire-dom-event, automations)
-  are wired to it and silently changing it would break every existing reference.
+- Create new popup — name only (generates the slug/url_path); opens it in edit mode.
+  Everything about how the popup *presents itself* (below) is deliberately not a
+  creation-time decision — it lives in Settings instead, editable any time.
+- Popup settings (⚙ icon, repurposed from a plain "Rename" — done, milestone 5):
+  - Rename: changes the `title` only (via `lovelace/dashboards/update`) — the
+    `url_path`/slug stays fixed, since triggers (hash, fire-dom-event, automations)
+    are wired to it and silently changing it would break every existing reference.
+  - Popup header / subheader — free text, shown at the top of the popup's dialog when
+    it opens (`.headerTitle`/`.headerSubtitle` on the dialog — see 5.3). Blank by
+    default (no more hardcoded "NativePop" title). Saved as `nativepop_header` /
+    `nativepop_subheader` on the popup's own dashboard view config.
+  - Per-popup dialog width — a free-text field (not a size preset), so either a px or
+    % value works. Saved as `nativepop_dialog_width` on the same view config. Desktop
+    only by design (see 5.3); narrow/mobile always gets the full-width dialog
+    regardless, and the field's helper text says so.
+  - Custom CSS variables — a free-text, multiline field (`ha-form`'s `text.multiline`
+    selector), one `--variable: value;` per line, applied directly to the popup's
+    dialog element (`applyCustomCssVariables()` — parses only `--name: value` pairs,
+    nothing else, so it can't inject arbitrary CSS/JS). Saved as
+    `nativepop_css_variables`. Its helper text points at the README's own reference
+    list of which variables actually do something, rather than duplicating that list
+    in two places.
+  All four of the above piggyback on the same dashboard view config object
+  `type: sections` already lives on — no new metadata store (5.5/5.6 still holds).
 - Copy popup slug/hash to clipboard *(done, milestone 5)* — click-to-copy on each row's
   `#url_path` text, with a native-style toast confirmation (`hass-notification` event).
   Falls back to `execCommand("copy")` when `navigator.clipboard` isn't available (no
   secure context, e.g. plain-HTTP local instances). Copying a ready-to-paste example
   trigger YAML snippet (not just the bare slug) is still a nice-to-have, not built.
 - Optional: quick preview (render the popup's view read-only in a dialog).
-- Per-popup dialog width *(done, milestone 5)* — a free-text field (not a size preset)
-  in the create/rename dialog, so either a px or % value works. Saved as a
-  `nativepop_dialog_width` field on the popup's own dashboard view config (piggybacks
-  on the same object `type: sections` already lives on — no new metadata store).
-  Desktop only by design (see 5.3); narrow/mobile always gets the full-width dialog
-  regardless, and the field's helper text says so.
 
 This panel is mostly CRUD UI wrapping existing dashboard WS commands. No rendering
 internals needed here.
@@ -132,6 +146,14 @@ itself, see 7) is false. On narrow viewports the custom property is left untouch
 entirely, so `ha-dialog`'s own default (already viewport-safe) behavior governs —
 deliberately not reimplemented ourselves, to avoid the risk of guessing HA's
 internal breakpoint wrong.
+
+**Header/subheader/custom CSS** *(done, milestone 5)*: no default title (previously
+hardcoded to "NativePop") — `dialog.headerTitle`/`.headerSubtitle` are only set if
+the popup's own settings (5.2) define `nativepop_header`/`nativepop_subheader`,
+applied once the config fetch resolves, same as width. Unlike width, these (and any
+custom CSS variables) apply regardless of `isNarrow()` — only the *width* override
+is desktop-only by design; header text and arbitrary CSS variables aren't inherently
+a desktop-vs-mobile concern the way a fixed pixel width is.
 
 **Dialog component** *(done, milestone 5)*: both the popup content dialog and the
 create/rename form dialog use `ha-adaptive-dialog` (added HA 2026.3), not plain
@@ -394,6 +416,12 @@ menu rather than hand-rolled equivalents.
      bottom-sheet with touch/drag handling, not a resized dialog. Directly
      improves the mobile-behavior risk row in §7, though real companion-app
      testing is still outstanding (see below).
+   - Reshuffle: no default dialog title (was hardcoded "NativePop"), create
+     narrowed to name-only, and "Rename" grew into a single "Popup settings"
+     action (5.2) covering rename + header/subheader/width/custom-CSS —
+     Mikkel's call that all of these are "how a popup presents itself," not
+     creation-time decisions, and belong together rather than split across
+     create and a plain rename.
 
    Mobile-specific behavior (companion app testing) still outstanding — no
    way to verify without a physical device.

@@ -112,6 +112,14 @@
 // and forwards `.width`/`.headerTitle`/etc. to it, so the existing
 // `--ha-dialog-width-md` override (per-popup dialog width) keeps working
 // completely unchanged.
+//
+// Reshuffled at the same time: the popup content dialog no longer defaults
+// to a "NativePop" header - blank unless a popup's own settings set one.
+// Create is now name-only (just enough to generate the slug); everything
+// else that used to live in "rename" - name, header, subheader, width, and
+// a free-form CSS variable override - moved into a single "Popup settings"
+// action (the row's ⚙ icon, previously the rename icon), since all of it is
+// "how this popup presents itself" rather than a creation-time decision.
 import { html } from "lit-html";
 
 const POPUP_URL_PATH_PREFIX = "popup-";
@@ -124,11 +132,29 @@ const DEFAULT_POPUP_URL_PATH = "popup-test"; // fallback for the PoC card only
 const ICON_PATHS = {
   pencil:
     "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z",
-  renameBox:
-    "M18,17H10.5L12.5,15H18M6,17V14.5L13.88,6.65C14.07,6.45 14.39,6.45 14.59,6.65L16.35,8.41C16.55,8.61 16.55,8.92 16.35,9.12L8.47,17M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3Z",
+  cog:
+    "M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z",
   deleteOutline:
     "M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19M8,9H16V19H8V9M15.5,4L14.5,3H9.5L8.5,4H5V6H19V4H15.5Z",
 };
+
+// Applies a block of "--custom-property: value;" lines (one per line, or
+// semicolon-separated) to an element's inline style - the free-text "custom
+// CSS variables" popup setting. Deliberately narrow: only ever calls
+// style.setProperty() with a parsed --name/value pair, so there's no way
+// for this to inject arbitrary CSS rules or run anything - at worst, an
+// unmatched/garbage line is silently ignored.
+function applyCustomCssVariables(el, cssVariablesText) {
+  if (!cssVariablesText) {
+    return;
+  }
+  for (const line of cssVariablesText.split(/[\n;]/)) {
+    const match = line.match(/^\s*(--[a-zA-Z0-9-]+)\s*:\s*(.+?)\s*$/);
+    if (match) {
+      el.style.setProperty(match[1], match[2]);
+    }
+  }
+}
 
 let currentDialog = null;
 let currentPopupUrlPath = null;
@@ -239,7 +265,8 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   // tracking touch position, closing on a downward swipe). `allowModeChange`
   // handles the edge case of rotating a tablet/phone while a popup is open.
   const dialog = document.createElement("ha-adaptive-dialog");
-  dialog.headerTitle = "NativePop";
+  // No default title/subtitle - blank unless a popup's own settings (5.2)
+  // set one, applied once the config fetch below resolves.
   dialog.width = "medium";
   dialog.allowModeChange = true;
   dialog.open = true;
@@ -324,14 +351,25 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
     return;
   }
 
+  const popupView = (lovelaceConfig.views && lovelaceConfig.views[0]) || {};
+
   if (!isNarrow()) {
-    const customWidth = sanitizeDialogWidth(
-      lovelaceConfig.views && lovelaceConfig.views[0] && lovelaceConfig.views[0].nativepop_dialog_width
-    );
+    const customWidth = sanitizeDialogWidth(popupView.nativepop_dialog_width);
     if (customWidth) {
       dialog.style.setProperty("--ha-dialog-width-md", customWidth);
     }
   }
+
+  // Header/subtitle and any free-form CSS variable overrides (popup
+  // settings, see NativePopPanel._openPopupSettings) - unlike width, these
+  // apply regardless of narrow/desktop.
+  if (popupView.nativepop_header) {
+    dialog.headerTitle = popupView.nativepop_header;
+  }
+  if (popupView.nativepop_subheader) {
+    dialog.headerSubtitle = popupView.nativepop_subheader;
+  }
+  applyCustomCssVariables(dialog, popupView.nativepop_css_variables);
 
   // Minimal but structurally correct `Lovelace` object — matches the shape
   // hui-view/hui-root expect (config, rawConfig, editMode, urlPath, mode,
@@ -459,44 +497,68 @@ function slugify(text) {
     .replace(/^-+|-+$/g, "");
 }
 
-// Schema shared by create and rename: name (required) + an optional
-// free-text dialog width override. Free text rather than a preset dropdown
-// (Mikkel's call) so either a px or % value works - sanitizeDialogWidth()
-// is what actually validates it, both here (defense in depth, not a hard
-// gate on the form) and again wherever the value is applied.
-const POPUP_FORM_SCHEMA = [
+// Create only ever asks for a name (used to generate the slug/url_path) -
+// everything else is a popup *settings* concern (below), not a creation-time
+// decision.
+const POPUP_CREATE_SCHEMA = [{ name: "title", required: true, selector: { text: {} } }];
+
+// Popup settings: rename + how the popup's own dialog looks when it opens.
+// Free text throughout (not dropdowns/presets - Mikkel's call for width,
+// extended to header/subheader/CSS here for the same reason: arbitrary
+// values beat a fixed set of options). sanitizeDialogWidth() and
+// applyCustomCssVariables() are what actually validate/parse width and CSS
+// respectively - this form doesn't hard-gate on either being well-formed.
+const POPUP_SETTINGS_SCHEMA = [
   { name: "title", required: true, selector: { text: {} } },
+  { name: "header", required: false, selector: { text: {} } },
+  { name: "subheader", required: false, selector: { text: {} } },
   { name: "width", required: false, selector: { text: {} } },
+  { name: "css_variables", required: false, selector: { text: { multiline: true } } },
 ];
 
 function computePopupFormLabel(schema) {
-  if (schema.name === "title") {
-    return "Name";
+  switch (schema.name) {
+    case "title":
+      return "Name";
+    case "header":
+      return "Popup header";
+    case "subheader":
+      return "Popup subheader";
+    case "width":
+      return "Dialog width (desktop only)";
+    case "css_variables":
+      return "Custom CSS variables (advanced)";
+    default:
+      return schema.name;
   }
-  if (schema.name === "width") {
-    return "Dialog width (desktop only)";
-  }
-  return schema.name;
 }
 
 function computePopupFormHelper(schema) {
-  if (schema.name === "width") {
-    return 'e.g. "800px" or "70%" - leave blank for the default. Narrow/mobile screens always open as a full-width swipeable sheet instead, regardless of this setting.';
+  switch (schema.name) {
+    case "header":
+      return "Shown at the top of the popup dialog when it opens. Leave blank for no title.";
+    case "subheader":
+      return "Optional smaller text under the header.";
+    case "width":
+      return 'e.g. "800px" or "70%" - leave blank for the default. Narrow/mobile screens always open as a full-width swipeable sheet instead, regardless of this setting.';
+    case "css_variables":
+      return 'One "--variable: value;" per line, applied directly to this popup\'s dialog. See the README\'s "Popup dialog CSS variables" section for the list of variables you can use here. Leave blank for defaults.';
+    default:
+      return "";
   }
-  return "";
 }
 
-// Real dialog for entering a popup's name + dialog width (create/rename),
-// matching HA's own dashboard create/edit dialog
+// Real dialog for entering a popup's name (create) or full settings
+// (rename/settings), matching HA's own dashboard create/edit dialog
 // (dialog-lovelace-dashboard-detail.ts) instead of a browser prompt():
 // ha-adaptive-dialog (see openNativePopDialog for why - real desktop
 // dialog/mobile bottom-sheet, with genuine swipe-to-close, not just a
 // resized ha-dialog) + ha-form (schema-driven, so it renders through the
 // same field components any native settings form uses) + ha-dialog-footer
-// with primary/secondary ha-button actions. Resolves to {title, width}
-// (width raw/untrimmed - sanitizeDialogWidth() at the call site decides if
-// it's usable), or null if cancelled.
-function showNativePopFormDialog(hass, { heading, data, confirmLabel }) {
+// with primary/secondary ha-button actions. Resolves to the data object
+// (raw/untrimmed - callers sanitize each field as needed), or null if
+// cancelled.
+function showNativePopFormDialog(hass, { heading, data, schema, confirmLabel }) {
   return new Promise((resolve) => {
     let currentData = { ...data };
     let resolved = false;
@@ -509,7 +571,7 @@ function showNativePopFormDialog(hass, { heading, data, confirmLabel }) {
 
     const form = document.createElement("ha-form");
     form.hass = hass;
-    form.schema = POPUP_FORM_SCHEMA;
+    form.schema = schema;
     form.data = currentData;
     form.computeLabel = computePopupFormLabel;
     form.computeHelper = computePopupFormHelper;
@@ -653,14 +715,16 @@ class NativePopPanel extends HTMLElement {
         // a "⋮". Using .path= directly (real SVG data, see ICON_PATHS) now
         // that real Lit templates are available, rather than the
         // slotted-<ha-icon> fallback used before the build step existed.
+        // "Rename" is now "Settings" (cog icon) - repurposed to cover
+        // rename + how the popup's dialog looks when it opens (5.2).
         template: (popup) => html`
           <div style="display: flex;">
             <ha-icon-button
-              .path=${ICON_PATHS.renameBox}
-              label="Rename"
+              .path=${ICON_PATHS.cog}
+              label="Settings"
               @click=${(ev) => {
                 ev.stopPropagation();
-                this._renamePopup(popup);
+                this._openPopupSettings(popup);
               }}
             ></ha-icon-button>
             <ha-icon-button
@@ -814,23 +878,40 @@ class NativePopPanel extends HTMLElement {
     fireLocationChanged();
   }
 
-  async _renamePopup(popup) {
-    // Fetched once up front: pre-fills the current width in the dialog, and
-    // (if the width changes) gets reused to save it back, so this is a
-    // single lovelace/config round trip either way instead of two.
+  // Rename + how the popup's own dialog looks when it opens (header,
+  // subheader, width, raw CSS variables) - one settings dialog rather than
+  // a plain rename, since all of these are "how this popup presents itself"
+  // decisions that belong together, not creation-time decisions (5.2).
+  async _openPopupSettings(popup) {
+    // Fetched once up front: pre-fills the dialog, and (if anything besides
+    // the name changes) gets reused to save it back - a single
+    // lovelace/config round trip either way instead of several.
     let config;
     try {
       config = await this._hass.callWS({ type: "lovelace/config", url_path: popup.url_path });
     } catch (err) {
-      console.error("NativePop: could not load popup config for rename", err);
+      console.error("NativePop: could not load popup config for settings", err);
       alert("NativePop: could not load popup. See console for details.");
       return;
     }
-    const currentWidth = (config.views && config.views[0] && config.views[0].nativepop_dialog_width) || "";
+    const view = (config.views && config.views[0]) || {};
+    const current = {
+      header: view.nativepop_header || "",
+      subheader: view.nativepop_subheader || "",
+      width: view.nativepop_dialog_width || "",
+      cssVariables: view.nativepop_css_variables || "",
+    };
 
     const result = await showNativePopFormDialog(this._hass, {
-      heading: "Rename popup",
-      data: { title: popup.title, width: currentWidth },
+      heading: "Popup settings",
+      data: {
+        title: popup.title,
+        header: current.header,
+        subheader: current.subheader,
+        width: current.width,
+        css_variables: current.cssVariables,
+      },
+      schema: POPUP_SETTINGS_SCHEMA,
       confirmLabel: "Save",
     });
     if (!result) {
@@ -838,10 +919,19 @@ class NativePopPanel extends HTMLElement {
     }
 
     const newTitle = (result.title || "").trim();
+    const newHeader = (result.header || "").trim();
+    const newSubheader = (result.subheader || "").trim();
     const newWidth = sanitizeDialogWidth(result.width) || "";
+    const newCssVariables = (result.css_variables || "").trim();
+
     const titleChanged = newTitle && newTitle !== popup.title;
-    const widthChanged = newWidth !== currentWidth;
-    if (!titleChanged && !widthChanged) {
+    const viewSettingsChanged =
+      newHeader !== current.header ||
+      newSubheader !== current.subheader ||
+      newWidth !== current.width ||
+      newCssVariables !== current.cssVariables;
+
+    if (!titleChanged && !viewSettingsChanged) {
       return;
     }
 
@@ -861,15 +951,21 @@ class NativePopPanel extends HTMLElement {
       }
     }
 
-    if (widthChanged) {
+    if (viewSettingsChanged) {
       const views = config.views ? [...config.views] : [{ type: "sections", sections: [] }];
-      const view = { ...views[0] };
-      if (newWidth) {
-        view.nativepop_dialog_width = newWidth;
-      } else {
-        delete view.nativepop_dialog_width;
-      }
-      views[0] = view;
+      const newView = { ...views[0] };
+      const setOrDelete = (key, value) => {
+        if (value) {
+          newView[key] = value;
+        } else {
+          delete newView[key];
+        }
+      };
+      setOrDelete("nativepop_header", newHeader);
+      setOrDelete("nativepop_subheader", newSubheader);
+      setOrDelete("nativepop_dialog_width", newWidth);
+      setOrDelete("nativepop_css_variables", newCssVariables);
+      views[0] = newView;
       try {
         await this._hass.callWS({
           type: "lovelace/config/save",
@@ -877,8 +973,8 @@ class NativePopPanel extends HTMLElement {
           config: { ...config, views },
         });
       } catch (err) {
-        console.error("NativePop: could not save popup dialog width", err);
-        alert("NativePop: could not save the dialog width. See console for details.");
+        console.error("NativePop: could not save popup settings", err);
+        alert("NativePop: could not save popup settings. See console for details.");
       }
     }
 
@@ -886,9 +982,13 @@ class NativePopPanel extends HTMLElement {
   }
 
   async _createPopup() {
+    // Create only asks for a name - everything else (header/subheader/
+    // width/CSS) is a popup settings concern, set afterward via the "⚙"
+    // action once the popup exists (see _openPopupSettings).
     const result = await showNativePopFormDialog(this._hass, {
       heading: "Create popup",
-      data: { title: "", width: "" },
+      data: { title: "" },
+      schema: POPUP_CREATE_SCHEMA,
       confirmLabel: "Create",
     });
     if (!result) {
@@ -898,7 +998,6 @@ class NativePopPanel extends HTMLElement {
     if (!title) {
       return;
     }
-    const width = sanitizeDialogWidth(result.width);
     const slug = slugify(title);
     if (!slug) {
       alert("NativePop: please use a name with at least one letter or number.");
@@ -938,15 +1037,11 @@ class NativePopPanel extends HTMLElement {
     // Dashboard creation doesn't let you set the view type - default it to a
     // single "sections" view per spec 5.1. Non-fatal if this fails; the
     // dashboard still exists, just with whatever HA's own fallback view is.
-    const viewConfig = { title, type: "sections", sections: [] };
-    if (width) {
-      viewConfig.nativepop_dialog_width = width;
-    }
     try {
       await this._hass.callWS({
         type: "lovelace/config/save",
         url_path: urlPath,
-        config: { views: [viewConfig] },
+        config: { views: [{ title, type: "sections", sections: [] }] },
       });
     } catch (err) {
       console.warn("NativePop: created popup but could not set its default view to sections", err);

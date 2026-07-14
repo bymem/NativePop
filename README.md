@@ -25,6 +25,34 @@ Actions workflow (`.github/workflows/verify-build.yml`) fails CI if `src/`
 changes without a matching rebuild, so a stale build artifact can't silently
 slip through a PR.
 
+## Popup dialog CSS variables
+
+Each popup's **Settings** (⚙ icon in Popup Manager) has a free-text "Custom
+CSS variables" box — one `--variable: value;` per line, applied directly to
+that popup's dialog (`ha-adaptive-dialog`/`ha-dialog`). Verified against
+`ha-dialog`'s own source (`src/components/ha-dialog.ts`), not guessed:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `--ha-dialog-max-height` | `calc(var(--safe-height) - var(--ha-space-20))` | Caps the dialog's height |
+| `--ha-dialog-min-height` | *(none)* | Forces a minimum height |
+| `--ha-dialog-border-radius` | `var(--ha-border-radius-3xl)` | Corner rounding |
+| `--ha-dialog-surface-background` | `var(--card-background-color, --ha-color-surface-default)` | Dialog background |
+| `--dialog-content-padding` | `var(--ha-space-6)` | Inner padding around content |
+| `--dialog-surface-margin-top` | `auto` | Vertical position within the viewport |
+| `--ha-dialog-header-title-color` | `var(--primary-text-color)` | Header title text color |
+| `--ha-dialog-header-title-font-size` | `var(--ha-font-size-2xl)` | Header title text size |
+| `--ha-dialog-header-title-font-weight` | `var(--ha-font-weight-normal)` | Header title text weight |
+| `--ha-dialog-header-title-line-height` | `var(--ha-line-height-condensed)` | Header title line height |
+
+**Don't set `--ha-dialog-width-*` here** — desktop width already has its own
+dedicated "Dialog width" field in the same settings dialog (applied to
+`--ha-dialog-width-md` specifically); a line for it in the CSS box would be
+applied afterward and silently win over that field instead of erroring.
+
+Header/subheader text itself isn't a CSS variable — set those via the
+"Popup header"/"Popup subheader" fields in the same settings dialog.
+
 ## Status: Milestone 5 (polish)
 
 All trigger paths are slug-driven and usable without any NativePop-specific
@@ -58,14 +86,19 @@ The `nativepop-poc-card` from earlier milestones still works (now with a
 configurable `popup:` key) as a quick test harness, but it's no longer the
 recommended way to trigger a popup — see the native-card tests below.
 
-**Sidebar panel** ("Popup Manager", `nativepop-panel`) lists, creates,
-renames, and deletes popups — no more manually creating dashboards through
-Settings. Naming-convention based (any dashboard with a `popup-*` url_path
-counts, no metadata storage yet). Create prompts for a name, derives the
-url_path by slugifying it, creates the hidden dashboard, defaults its view to
-`type: sections`, and opens it straight into edit mode (`?edit=1`). Rename
-only changes the display title — the url_path stays fixed on purpose, since
-every trigger (hash, fire-dom-event, automation) is wired to it.
+**Sidebar panel** ("Popup Manager", `nativepop-panel`) lists, creates, and
+deletes popups — no more manually creating dashboards through Settings.
+Naming-convention based (any dashboard with a `popup-*` url_path counts, no
+metadata storage yet). Create only asks for a name — derives the url_path by
+slugifying it, creates the hidden dashboard, defaults its view to
+`type: sections`, and opens it straight into edit mode (`?edit=1`).
+Everything else about how a popup presents itself lives behind the row's ⚙
+**Settings** icon (previously "Rename"): rename (title only — the url_path
+stays fixed, since every trigger is wired to it), a "Popup header"/"Popup
+subheader" shown at the top of the dialog when it opens (blank by default —
+no more hardcoded "NativePop" title), the per-popup dialog width from
+before, and a free-text custom-CSS-variables box (see "Popup dialog CSS
+variables" below).
 
 **This milestone's polish**:
 - The trigger dialog now opens immediately with a loading spinner instead of
@@ -213,7 +246,7 @@ just HA storage dashboards, untouched by any of this.
     Settings > Dashboards):
     - Existing popups should show up as rows: leading icon, title with
       `#url_path` underneath as secondary text, and three icon buttons
-      (Rename/Edit/Delete) directly on the row — no overflow menu.
+      (Settings/Edit/Delete) directly on the row — no overflow menu.
     - A **search box** should appear above the list automatically (no setup
       needed) — type part of a popup's name or url_path and confirm it
       filters the rows live.
@@ -229,14 +262,13 @@ just HA storage dashboards, untouched by any of this.
     - Clicking anywhere else on a row should open that dashboard in edit
       mode — check clicking one of the three action icons does *not* also
       trigger this (stopPropagation should keep them independent).
-    - Pencil icon opens edit mode (same as row click). Rename icon opens the
-      same style of dialog as create, pre-filled with the current name
-      (url_path/hash stays the same after — check an existing trigger still
-      works). Delete icon asks for confirmation, then removes it and
-      refreshes the list.
+    - Pencil icon opens edit mode (same as row click). Cog icon opens the
+      **Popup settings** dialog (see step 16). Delete icon asks for
+      confirmation, then removes it and refreshes the list.
     - "+ New popup" (bottom-right) should render as a filled, pill-shaped
       button in your theme's accent color, matching Settings > Dashboards'
-      "Add dashboard" button. Same create dialog as before.
+      "Add dashboard" button. Its dialog should now ask **only** for a name —
+      no width field anymore (that moved to Settings).
     - On a narrow window (or the companion app), check the hamburger icon in
       the panel's toolbar actually opens the sidebar, and that all three row
       icons stay usable (not clipped/overlapping) at narrow widths.
@@ -244,8 +276,8 @@ just HA storage dashboards, untouched by any of this.
     wider than before; briefly shows a spinner before content appears (may be
     too fast to see on a fast connection/LAN, that's fine); and clicking
     outside the dialog (on the dimmed background) closes it.
-14. **Per-popup dialog width** — open a popup's Rename dialog, set width to
-    e.g. `500px`, save, then re-open the popup on desktop: it should be
+14. **Per-popup dialog width** — open a popup's ⚙ Settings dialog, set width
+    to e.g. `500px`, save, then re-open the popup on desktop: it should be
     noticeably narrower than the default. Try `70%` too. Then check on a
     narrow window (or the companion app/phone) — it should be full width
     regardless of the saved value. Clear the field back to blank and confirm
@@ -253,6 +285,19 @@ just HA storage dashboards, untouched by any of this.
 15. **Swipe-to-close (mobile/narrow only)** — on a phone, the companion app,
     or a narrow-enough browser window, open a popup and drag it down from
     the top — it should follow your finger and close on release, the same
-    as HA's own native mobile dialogs. Try it on the create/rename dialog
-    too. On desktop, confirm both dialogs still look and behave like normal
-    dialogs (this only changes the mobile/narrow presentation).
+    as HA's own native mobile dialogs. Try it on the create and settings
+    dialogs too. On desktop, confirm both dialogs still look and behave like
+    normal dialogs (this only changes the mobile/narrow presentation).
+16. **Popup settings — header/subheader/CSS variables**:
+    - Open any popup without having set anything yet — the dialog should
+      have **no title at all** in its header, just the close button.
+    - Open ⚙ Settings, set "Popup header" to e.g. "Laundry" and "Popup
+      subheader" to "Washing machine", save, then re-open the popup — both
+      should now appear at the top of the dialog. Clear both back to blank
+      and confirm the header goes back to empty.
+    - In the same Settings dialog, paste something like
+      `--ha-dialog-border-radius: 4px;` into "Custom CSS variables", save,
+      and confirm the popup's corners actually change shape when reopened.
+      Clear it and confirm it reverts.
+    - Confirm the "Custom CSS variables" field's helper text points at this
+      README's "Popup dialog CSS variables" section.
