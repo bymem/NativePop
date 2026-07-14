@@ -721,7 +721,7 @@ class NativePopPanel extends HTMLElement {
         // "Rename" is now "Settings" (cog icon) - repurposed to cover
         // rename + how the popup's dialog looks when it opens (5.2).
         template: (popup) => html`
-          <div style="display: flex;">
+          <div style="display: flex; width: 100%; justify-content: flex-end;">
             <ha-icon-button
               .path=${ICON_PATHS.cog}
               label="Settings"
