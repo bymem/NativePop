@@ -332,8 +332,6 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   dialog.width = "medium";
   dialog.allowModeChange = true;
   dialog.open = true;
-  dialog.style.setProperty("--ha-view-sections-column-gap", "0");
-  dialog.style.setProperty("--narrow-column-gap", "0");
   if (!isNarrow()) {
     dialog.style.setProperty("--ha-dialog-width-md", "min(90vw, 1024px)");
   }
@@ -417,6 +415,9 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   view.lovelace = lovelace;
   view.index = 0;
   view.narrow = false;
+  view.style.setProperty("--ha-view-sections-column-gap", "0");
+  view.style.setProperty("--narrow-column-gap", "0");
+  applyCustomCssVariables(view, popupView.nativepop_css_variables);
   content.remove();
   dialog.appendChild(view);
 }

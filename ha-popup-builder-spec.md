@@ -155,9 +155,10 @@ custom CSS variables) apply regardless of `isNarrow()` — only the *width* over
 is desktop-only by design; header text and arbitrary CSS variables aren't inherently
 a desktop-vs-mobile concern the way a fixed pixel width is.
 
-**Content padding** *(done, milestone 5, three-round fix)*: popup content was
-sitting double-inset from the dialog's edge — two nested padding sources stacking
-on each other.
+**Content padding** *(done, milestone 5, five-round fix — a case study in why "verify
+against source" isn't the same as "verify live")*: popup content was sitting
+double-inset from the dialog's edge — two nested padding sources stacking on each
+other.
 - Round 1 zeroed `--dialog-content-padding` (`ha-dialog`'s own `.body` padding,
   defaults to the shorthand `0 var(--ha-space-6) var(--ha-space-6)
   var(--ha-space-6)`), real but the wrong layer — the reported measurement (8px)
@@ -166,18 +167,39 @@ on each other.
 - Round 2 reverted that (the ~24px is the dialog's normal chrome, same as any other
   HA dialog, meant to stay) and zeroed `--column-gap` instead — `hui-sections-view`'s
   own `.wrapper` div padding (`0 var(--column-gap)`, defaults to 8px narrow / 32px
-  desktop). Had no visible effect: DOM inspection showed the 8px still present.
-- Round 3 found why: `hui-sections-view`'s own `:host` rule *redefines*
+  desktop). Had no visible effect.
+- Round 3 found (from source) that `hui-sections-view`'s own `:host` rule *redefines*
   `--column-gap` locally (`var(--ha-view-sections-column-gap, 32px)` desktop,
-  `var(--narrow-column-gap)` under 600px width) — a value set on an ancestor gets
-  shadowed by that local redefinition, so round 2's fix silently did nothing.
-  Overriding the two upstream variables it actually reads from
-  (`--ha-view-sections-column-gap`, `--narrow-column-gap`) instead of `--column-gap`
-  itself is what actually works, confirmed against `hui-sections-view.ts`'s full
-  static styles rather than the single `.wrapper` rule checked in round 2.
+  `var(--narrow-column-gap)` under 600px), so a value set on an ancestor gets
+  shadowed. Overrode those two upstream variables instead, still on `dialog`.
+  **Also had no visible effect.**
+- Round 4, having now been wrong twice from source-reading alone, gave up on
+  CSS-variable overrides entirely and instead injected a `<style>` rule with
+  `!important` directly into `hui-sections-view`'s own shadow root
+  (`stripSectionsViewGutter()`) — bypassing the cascade so it wouldn't matter which
+  variable actually won. **Also had no visible effect**, confirmed via live DOM
+  inspection (`document.querySelector(...).shadowRoot.querySelector("#nativepop-gutter-override")`
+  returned `null` — the injection itself wasn't landing, a JS bug, not a CSS one).
+- Round 5 changed method entirely: asked for a live browser-console test instead of
+  reading more source. Confirmed directly in DevTools that `.wrapper`'s CSS
+  (`padding: 0 var(--column-gap)`) matched round 2/3's understanding exactly, *and*
+  that manually setting `--ha-view-sections-column-gap`/`--narrow-column-gap`
+  **directly on the `hui-sections-view` element itself** (not an ancestor) removed
+  the padding immediately. This pinpointed the actual bug: the variables and the
+  target element were both right all along — the problem was *distance*.
+  `ha-adaptive-dialog`'s internal desktop/mobile split sits between `dialog` and
+  `hui-view` and evidently redefines them somewhere in there. `hui-view` has no
+  shadow root of its own (renders straight into light DOM) and `hui-sections-view`
+  is its direct light-DOM child, so setting the two variables on `view` (which we
+  create ourselves, synchronously, before it's ever rendered) crosses no shadow
+  boundary and needs no wait/retry — fixed for good, replacing round 4's
+  shadow-root-injection approach entirely.
 
-Applied before the popup's own custom CSS variables (5.2), so any of the above can
-still be explicitly reintroduced/adjusted per popup via that field if wanted.
+Applied before the popup's own custom CSS variables (5.2), which are now applied to
+*both* `dialog` (chrome-level variables) and `view` (content-level variables like
+the two above) for the same reason — a per-popup override of a content-level
+variable would have had the exact same "set on the wrong element" problem if only
+ever applied to `dialog`.
 
 **Dialog component** *(done, milestone 5)*: both the popup content dialog and the
 create/rename form dialog use `ha-adaptive-dialog` (added HA 2026.3), not plain

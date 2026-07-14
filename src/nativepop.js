@@ -275,20 +275,17 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   // is left alone deliberately - that ~24px is the dialog's normal chrome,
   // consistent with every other HA dialog, not something to strip.
   //
-  // What actually needed zeroing is one level further in: hui-sections-view
-  // has its OWN horizontal padding on its ".wrapper" div - `padding: 0
-  // var(--column-gap)`. Setting --column-gap itself on an ancestor doesn't
-  // work, though - hui-sections-view's `:host` rule *redefines* it locally:
-  //   :host { --column-gap: var(--ha-view-sections-column-gap, 32px); }
-  //   @media (max-width: 600px) { :host { --column-gap: var(--narrow-column-gap); } }
-  // (see src/panels/lovelace/views/hui-sections-view.ts) - a value set on an
-  // outer ancestor gets shadowed by that local redefinition. Overriding the
-  // two upstream variables it actually reads from works instead, since
-  // those get consulted via var(), not redefined locally. Zeroed
-  // unconditionally (not a per-popup setting), overridable per popup via
-  // the custom CSS variables field if wanted.
-  dialog.style.setProperty("--ha-view-sections-column-gap", "0");
-  dialog.style.setProperty("--narrow-column-gap", "0");
+  // hui-sections-view's own nested ".wrapper" padding (--column-gap, fed by
+  // --ha-view-sections-column-gap/--narrow-column-gap) is the one to strip -
+  // done below, once `view` exists, not here. Confirmed live (not just from
+  // source) that setting these two on `dialog` doesn't reach hui-sections-view
+  // - something shadow-DOM-deep between them (ha-adaptive-dialog's internal
+  // ha-dialog/ha-bottom-sheet split, most likely) redefines them first. hui-view
+  // has no shadow root of its own (renders straight into light DOM) and
+  // hui-sections-view is its direct light-DOM child, so setting them on
+  // `view` itself - which we create synchronously, before it's ever
+  // rendered - reaches it with no shadow boundary in the way and no
+  // wait/retry/flash-of-unstyled-content risk.
   // In desktop/dialog mode this literally renders a nested <ha-dialog>
   // internally (confirmed in ha-adaptive-dialog's own source) forwarding
   // `.width`, so the same --ha-dialog-width-md override still works exactly
@@ -413,6 +410,21 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   view.lovelace = lovelace;
   view.index = 0; // popup dashboards are single-view (spec 5.1)
   view.narrow = false;
+  // hui-sections-view (view's direct light-DOM child - hui-view has no
+  // shadow root of its own) reads these two to compute --column-gap, its
+  // own nested ".wrapper" div's horizontal padding - confirmed live via the
+  // browser console, not just from source, that setting them here (as
+  // opposed to on `dialog`, several shadow-DOM boundaries further out)
+  // actually reaches it. Set synchronously before `view` is ever rendered,
+  // so there's no flash of the padded state first.
+  view.style.setProperty("--ha-view-sections-column-gap", "0");
+  view.style.setProperty("--narrow-column-gap", "0");
+  // Popup custom CSS variables are applied to both `dialog` (chrome-level
+  // things like border-radius, header font size) and `view` (content-level
+  // things like the two above) - given the shadow-distance surprise just
+  // above, a variable meant for content wouldn't reliably reach it if only
+  // ever applied at the dialog level, same as our own defaults didn't.
+  applyCustomCssVariables(view, popupView.nativepop_css_variables);
 
   content.remove();
   dialog.appendChild(view);
