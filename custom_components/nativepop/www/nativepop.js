@@ -636,8 +636,11 @@ var NativePopPanel = class extends HTMLElement {
       },
       actions: {
         title: "",
-        minWidth: "144px",
-        maxWidth: "144px",
+        // Three icon buttons at their default ~48px touch target already
+        // sum to 144px with zero room left for the cell's own padding - a
+        // maxWidth pinned to exactly that clips/pushes them out. Give it
+        // headroom instead of an exact-fit cap.
+        minWidth: "168px",
         showNarrow: true,
         // Three plain ha-icon-buttons instead of an overflow menu - Mikkel
         // wants all three actions visible on the row, not collapsed behind
