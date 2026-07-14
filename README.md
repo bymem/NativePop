@@ -39,7 +39,8 @@ that popup's dialog (`ha-adaptive-dialog`/`ha-dialog`). Verified against
 | `--ha-dialog-border-radius` | `var(--ha-border-radius-3xl)` | Corner rounding |
 | `--ha-dialog-surface-background` | `var(--card-background-color, --ha-color-surface-default)` | Dialog background |
 | `--dialog-content-padding` | `0 var(--ha-space-6) var(--ha-space-6) var(--ha-space-6)` (untouched — the dialog's normal chrome, same as any other HA dialog) | Padding around the dialog's `.body` content area |
-| `--column-gap` | **`0`** (`hui-sections-view`'s own default: 8px narrow / 32px desktop — see below) | Horizontal padding on the sections view's own `.wrapper` div — this was the *nested, redundant* padding stacking on top of the dialog's own; the one actually worth removing |
+| `--ha-view-sections-column-gap` | **`0`** (`hui-sections-view`'s own default: 32px, desktop/wide) | Feeds `hui-sections-view`'s internal `--column-gap` (its `.wrapper` div's horizontal padding) above 600px width |
+| `--narrow-column-gap` | **`0`** (`hui-sections-view`'s own default: HA's global "narrow column gap" theme variable, effectively 8px) | Same, below 600px width |
 | `--dialog-surface-margin-top` | `auto` | Vertical position within the viewport |
 | `--ha-dialog-header-title-color` | `var(--primary-text-color)` | Header title text color |
 | `--ha-dialog-header-title-font-size` | `var(--ha-font-size-2xl)` | Header title text size |
@@ -51,16 +52,24 @@ dedicated "Dialog width" field in the same settings dialog (applied to
 `--ha-dialog-width-md` specifically); a line for it in the CSS box would be
 applied afterward and silently win over that field instead of erroring.
 
+**Don't set `--column-gap` directly either** — `hui-sections-view` (the
+component that actually uses it for its `.wrapper` padding) *redefines*
+`--column-gap` on its own `:host` from `--ha-view-sections-column-gap` /
+`--narrow-column-gap`, so a value set from outside its own component tree
+gets shadowed and silently has no effect. Use the two variables above
+instead — they're what it actually reads from.
+
 Header/subheader text itself isn't a CSS variable — set those via the
 "Popup header"/"Popup subheader" fields in the same settings dialog.
 
-Only `--column-gap` is zeroed by default (unconditionally, every popup, not
-a per-popup setting) — `--dialog-content-padding` is left at its normal
-value on purpose, so popup content sits with the same breathing room from
-the dialog's edge as any other HA dialog, just without the extra nested
-gutter `hui-sections-view` would otherwise add on top of that. You can still
-put a value for either in the CSS box above if you want to adjust one for a
-specific popup — the box is applied after our default, so it wins.
+`--ha-view-sections-column-gap` and `--narrow-column-gap` are both zeroed by
+default (unconditionally, every popup, not a per-popup setting) —
+`--dialog-content-padding` is left at its normal value on purpose, so popup
+content sits with the same breathing room from the dialog's edge as any
+other HA dialog, just without the extra nested gutter `hui-sections-view`
+would otherwise add on top of that. You can still put a value for any of
+these in the CSS box above if you want to adjust one for a specific popup —
+the box is applied after our defaults, so it wins.
 
 ## Status: Milestone 5 (polish)
 
@@ -115,12 +124,14 @@ variables" below).
   shows an inline error if the fetch fails, instead of a jarring `alert()`).
 - The dialog is now noticeably wider (`min(90vw, 1024px)`) instead of
   mwc-dialog's cramped default.
-- Removed `hui-sections-view`'s own nested grid gutter (`--column-gap`,
-  defaulting to 8px narrow / 32px desktop) — it was stacking on top of the
-  dialog's own normal content padding (`--dialog-content-padding`, left
-  alone on purpose), so popup content ended up double-inset from the
-  dialog's edge instead of sitting at a normal, single margin. See "Popup
-  dialog CSS variables" above.
+- Removed `hui-sections-view`'s own nested grid gutter, which was stacking
+  on top of the dialog's own normal content padding (`--dialog-content-padding`,
+  left alone on purpose) and making popup content double-inset from the
+  dialog's edge. Took two tries to actually land: `--column-gap` itself
+  turned out to be redefined locally on `hui-sections-view`'s own `:host`
+  (from `--ha-view-sections-column-gap`/`--narrow-column-gap`), so setting
+  it from outside had no effect — those two upstream variables are what
+  actually needed zeroing. See "Popup dialog CSS variables" above.
 - Close-on-outside-click turned out to already work by default (`ha-dialog`'s
   own behavior) — verified, no code needed.
 - The Popup Manager panel's list went through a few revisions before landing

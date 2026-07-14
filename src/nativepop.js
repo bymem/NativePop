@@ -277,13 +277,18 @@ async function openNativePopDialog(hass, popupUrlPath, { viaHash = false, pushed
   //
   // What actually needed zeroing is one level further in: hui-sections-view
   // has its OWN horizontal padding on its ".wrapper" div - `padding: 0
-  // var(--column-gap)`, where --column-gap defaults to 8px on narrow
-  // viewports / 32px on desktop (see
-  // src/panels/lovelace/views/hui-sections-view.ts). That's the nested,
-  // redundant padding stacking on top of the dialog's own - the one to
-  // remove. Zeroed unconditionally (not a per-popup setting), overridable
-  // per popup via the custom CSS variables field if wanted.
-  dialog.style.setProperty("--column-gap", "0");
+  // var(--column-gap)`. Setting --column-gap itself on an ancestor doesn't
+  // work, though - hui-sections-view's `:host` rule *redefines* it locally:
+  //   :host { --column-gap: var(--ha-view-sections-column-gap, 32px); }
+  //   @media (max-width: 600px) { :host { --column-gap: var(--narrow-column-gap); } }
+  // (see src/panels/lovelace/views/hui-sections-view.ts) - a value set on an
+  // outer ancestor gets shadowed by that local redefinition. Overriding the
+  // two upstream variables it actually reads from works instead, since
+  // those get consulted via var(), not redefined locally. Zeroed
+  // unconditionally (not a per-popup setting), overridable per popup via
+  // the custom CSS variables field if wanted.
+  dialog.style.setProperty("--ha-view-sections-column-gap", "0");
+  dialog.style.setProperty("--narrow-column-gap", "0");
   // In desktop/dialog mode this literally renders a nested <ha-dialog>
   // internally (confirmed in ha-adaptive-dialog's own source) forwarding
   // `.width`, so the same --ha-dialog-width-md override still works exactly
